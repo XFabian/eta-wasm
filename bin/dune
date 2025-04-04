@@ -1,0 +1,4 @@
+(executable
+ (public_name wasm_test)
+ (name main)
+ (libraries wasm_test wasmer))

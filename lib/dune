@@ -1,0 +1,11 @@
+(library
+ (name wasm_test)
+ (preprocess
+  (pps ppx_deriving.show))
+  )
+
+
+(menhir
+ (modules parser))
+
+(ocamllex lexer)

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Addition Example</title>
+</head>
+<body>
+    <h1>WebAssembly Addition</h1>
+    <p>Result: <span id="result">Loading...</span></p>
+
+    <script>
+        async function loadWasm() {
+            // Fetch and instantiate the WASM module
+            const response = await fetch('start_tests.wasm');
+            const buffer = await response.arrayBuffer();
+            const { instance } = await WebAssembly.instantiate(buffer);
+
+            // Call the 'add' function
+            const result = instance.exports.add(5, 3);
+
+            // Display result
+            document.getElementById('result').textContent = result;
+        }
+
+        loadWasm();
+    </script>
+</body>
+</html>
