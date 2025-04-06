@@ -26,6 +26,7 @@ type top_level =
       body : instruction list;
       params : string list;
       f_type : Types.t;
+      locals : string list;
     }
   | Data of { name : string; t : Types.t }
 

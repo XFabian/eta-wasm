@@ -118,3 +118,9 @@ or
 
 
 So how about structs? 
+
+
+
+We use the Eta language
+has ints and bools and arrays that are heap allocated
+Later on structs

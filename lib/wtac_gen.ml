@@ -2,8 +2,17 @@ module W = struct
   include Wtac
 end
 
+(* Maybe record that information somewhere. So during one function we can record all
+created variable
+then we reset it in the end
+Very ugly rioght now
+ *)
+let vars = ref []
+let reset () = !vars = []
+
 let make_wtac_var () =
   let dst_name = Unique_ids.make_temp () in
+  vars := dst_name :: !vars;
   W.Var dst_name
 
 let convert_binop = function
@@ -26,7 +35,13 @@ let gen (e : Ast.expr) : Wtac.program =
   let instrs, _res_v = expr_gen e in
   let f =
     Wtac.Function
-      { name = "test"; body = instrs; params = []; f_type = Types.Int }
+      {
+        name = "test";
+        body = instrs;
+        params = [];
+        f_type = Types.Int;
+        locals = !vars;
+      }
   in
   Program [ f ]
 (* For now we create the function for that expression *)

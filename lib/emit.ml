@@ -19,7 +19,7 @@ let emit_value out = function
 
 let emit_instruction chan = function
   | Return _ -> failwith "Return not implemented"
-  | Binary { op; src1; src2; _ } ->
+  | Binary { op; src1; src2; dst } -> (
       (* Put src1 and src2 on stack *)
       emit_value chan src1;
       emit_value chan src2;
@@ -30,16 +30,20 @@ let emit_instruction chan = function
       (* Copy into destination 
       Find to which local that corresponds
       TODO Have a func_info record that recors all these additonal informations*)
-      Printf.fprintf chan "local.set 0\n"
+      match dst with
+      | Var name -> Printf.fprintf chan "local.set $%s\n" name
+      | Imm _ ->
+          failwith "Internal Error: Should be a variable and not an immediate")
   | Unary _ -> failwith "Unary not implemented"
 
 let emit_top_level chan = function
-  | Function { name; body; _ } ->
+  | Function { name; body; locals; _ } ->
       Printf.fprintf chan "(func $%s\n" name;
+
       (* Define the locals of that function *)
+
       (* TODO hard coded right now *)
-      Printf.fprintf chan "(local $tmp1 i64)\n";
-      Printf.fprintf chan "(local $tmp2 i64)\n";
+      List.iter (fun l -> Printf.fprintf chan "(local $%s i64)\n" l) locals;
       List.iter (emit_instruction chan) body;
       Printf.fprintf chan ")\n";
       Printf.sprintf "(export \"%s\" (func $%s))" name name
@@ -57,3 +61,5 @@ let emit (Program decls) =
     export_strings;
   Printf.fprintf out_chan ")";
   close_out out_chan
+
+(* This is valid (local i32 i32 i32 i32 i32) *)

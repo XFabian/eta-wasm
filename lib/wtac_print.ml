@@ -36,7 +36,7 @@ let pp_function_definition out name params _f_type body =
   Format.pp_close_box out ()
 
 let pp_top_level out = function
-  | Function { name; params; f_type; body } ->
+  | Function { name; params; f_type; body; _ } ->
       pp_function_definition out name params f_type body
   | Data _ -> failwith "DATA not defined right now"
 
