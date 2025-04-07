@@ -21,6 +21,11 @@ rule read =
     | "-" {MINUS}
     | "(" {LPAREN}
     | ")" {RPAREN}
+    | "{" {LBRACE}
+    | "}" {RBRACE}
+    | ":" {COLON}
+    | "," {COMMA}
+    | "int" {TINT}
     | id {VAR (Lexing.lexeme lexbuf)}
     | int {INT (int_of_string (Lexing.lexeme lexbuf))}
     | eof {EOF}

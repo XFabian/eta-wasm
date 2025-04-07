@@ -7,19 +7,34 @@ let print_position out_channel (lexbuf : Lexing.lexbuf) =
     (pos.pos_cnum - pos.pos_bol + 1)
     (Lexing.lexeme lexbuf)
 
-let parse (s : string) : Ast.expr =
+let _parse (s : string) : Ast.prog =
   let lexbuf = Lexing.from_string s in
   let ast =
-    try Parser.expr_top Lexer.read lexbuf with
+    try Parser.prog Lexer.read lexbuf with
     | Parser.Error ->
         Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
         exit (-1)
   in
   ast
 
+let parse_file f_name =
+  let inx = open_in f_name in
+  let lexbuf = Lexing.from_channel inx in
+  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = f_name };
+  let ast =
+    try Parser.prog Lexer.read lexbuf with
+    | Parser.Error ->
+        close_in inx;
+        Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
+        exit (-1)
+  in
+  close_in inx;
+  ast
+
 let () =
-  let ast = parse "2 + 3 * 4" in
-  print_endline (Ast.show_expr ast);
-  let wtac = Wtac_gen.gen ast in
+  let ast = parse_file "test.eta" in
+  (* let ast = parse "2 + 3 * 4" in *)
+  print_endline (Ast.show_prog ast)
+(* let wtac = Wtac_gen.gen ast in
   Wtac_print.print_wtac "test.c" wtac;
-  Emit.emit wtac
+  Emit.emit wtac *)
