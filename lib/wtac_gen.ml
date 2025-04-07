@@ -8,7 +8,7 @@ then we reset it in the end
 Very ugly rioght now
  *)
 let vars = ref []
-let reset () = !vars = []
+let reset () = vars := []
 
 let make_wtac_var () =
   let dst_name = Unique_ids.make_temp () in
@@ -31,17 +31,18 @@ let rec expr_gen = function
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
 
-let gen (e : Ast.expr) : Wtac.program =
-  let instrs, _res_v = expr_gen e in
+let gen_function Ast.{ name; params; f_type; body } =
+  let instrs, _res_v = expr_gen body in
   let f =
-    Wtac.Function
-      {
-        name = "test";
-        body = instrs;
-        params = [];
-        f_type = Types.Int;
-        locals = !vars;
-      }
+    Wtac.Function { name; body = instrs; params; f_type; locals = !vars }
   in
-  Program [ f ]
-(* For now we create the function for that expression *)
+  reset ();
+  f
+
+let gen_top_level decl =
+  match decl with
+  | Ast.FunDecl fn -> gen_function fn
+
+let gen (Ast.Program decls) : Wtac.program =
+  let wtac_decls = List.map gen_top_level decls in
+  Wtac.Program wtac_decls

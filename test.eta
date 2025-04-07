@@ -1,0 +1,7 @@
+add(a:int, b:int) : int {
+    1 + 2
+}
+
+empty() {
+    3 + 4
+}

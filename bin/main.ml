@@ -34,7 +34,7 @@ let parse_file f_name =
 let () =
   let ast = parse_file "test.eta" in
   (* let ast = parse "2 + 3 * 4" in *)
-  print_endline (Ast.show_prog ast)
-(* let wtac = Wtac_gen.gen ast in
+  print_endline (Ast.show_prog ast);
+  let wtac = Wtac_gen.gen ast in
   Wtac_print.print_wtac "test.c" wtac;
-  Emit.emit wtac *)
+  Emit.emit wtac
