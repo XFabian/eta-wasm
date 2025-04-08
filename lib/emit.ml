@@ -15,6 +15,9 @@ let show_unary_op = function
   | Not -> "not"
 
 let emit_value out = function
+(*  I would like to have for booleans the i32 type
+So I need to pass in that informatin from somewhere
+instructoins and values should have a type *)
   | Imm i -> Format.fprintf out "i64.const %d" i
   (* Ths should return the local index of that variable RIght now it returns the get
   which makes more sense*)
@@ -31,10 +34,9 @@ let emit_instruction chan = function
   | Copy {src; dst} -> 
     (* TODO if that string is an array, then we need
       to do something differently *)
-    emit_value chan src;
-    emit_dst chan dst;
-      
-
+    Format.fprintf chan "%a@,%a"
+    emit_value src
+    emit_dst dst;
   | Binary { op; src1; src2; dst } ->
       (* Put src1 and src2 on stack *)
       Format.fprintf chan "%a@,%a@,%a@,%a"
@@ -65,6 +67,11 @@ let emit_top_level chan = function
 
 (* TODO stack pointer data_end and heap_base need to be defined and exported *)
 
+
+let compiler_globals chan = 
+  Format.fprintf chan "(global $__stack_pointer i32 (i32.const 0) )@,";
+  Format.fprintf chan "(global $__data_end i32 (i32.const 0) )@,";
+  Format.fprintf chan "(global $__heap_base i32 (i32.const 0) )@,"
 let preprocess_globals chan = function 
     | Function _ as f -> Some f 
     | Data {name; t; value} ->
@@ -77,6 +84,7 @@ let emit wasm_file (Program decls) =
   (* define module memory tables etc, and the data *)
   Format.fprintf formatter "@[<v 2>(module@,";
   (* define all globals *)
+  compiler_globals formatter;
   let funcs = List.filter_map (preprocess_globals formatter) decls in
 
   let export_strings = List.map (emit_top_level formatter) funcs in
