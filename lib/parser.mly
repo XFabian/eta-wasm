@@ -9,12 +9,15 @@
 %token LPAREN RPAREN LBRACE RBRACE
 %token COLON COMMA EQUAL
 %token TINT TBOOL
-%token RETURN
+%token RETURN IF ELSE WHILE
 %token EOF
 
 
 %left PLUS MINUS
 %left MULT
+
+%nonassoc THEN
+%nonassoc ELSE
 
 %start <Ast.prog> prog
 %%
@@ -57,6 +60,11 @@ stmt:
     | name = VAR; ty = type_spec init = option(EQUAL e=expr_top {e})
     {LocalDecl {name; init; var_type=ty}}
     | lhs = expr_top ; EQUAL; rhs = expr_top {Assign {lhs; rhs}}
+    | IF guard = expr_top; then_br = stmt; else_br = ioption(ELSE s=stmt {s}) 
+    {If {guard; then_br; else_br}}
+    | WHILE guard= expr_top; body=stmt {While {guard; body }}
+    | LBRACE; block = list(stmt); RBRACE {Compound (Block block)}
+    | name = VAR LPAREN; args=separated_list(COMMA,expr_top) RPAREN {Procedure {name; args}}
     ;
 
 expr_top : 
@@ -68,6 +76,7 @@ expr:
     | TRUE {Bool true}
     | FALSE {Bool false} 
     | e1 = expr; b = binop; e2 = expr {Binary (b, e1, e2)}
+    | name = VAR; LPAREN args=separated_list(COMMA, expr_top) RPAREN {FunCall{name; args}}
     | LPAREN e = expr RPAREN {e}
 
 %inline

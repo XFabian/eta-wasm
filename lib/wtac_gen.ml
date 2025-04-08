@@ -40,6 +40,7 @@ let rec expr_gen = function
       let w_bin = W.Binary { op = w_op; src1 = v_e1; src2 = v_e2; dst } in
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
+  | _ -> failwith "WTac not implemented"
 
 let stmt_gen = function
   | Ast.Return e ->
@@ -61,6 +62,7 @@ let stmt_gen = function
       (* TODO with arrays this will be trickier *)
       let instrs_lhs, lhs_res = expr_gen lhs in
       instrs_lhs @ instrs_rhs @ [ W.Copy { src = rhs_res; dst = lhs_res } ]
+  | _ -> failwith "IF and while not implemeted"
 
 let gen_function Ast.{ name; params; f_type; body = Block stmts } =
   let instrs = List.concat_map stmt_gen stmts in

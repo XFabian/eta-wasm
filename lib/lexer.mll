@@ -31,6 +31,9 @@ rule read =
     | "return" {RETURN}
     | "true" {TRUE}
     | "false" {FALSE}
+    | "if" {IF}
+    | "else" {ELSE}
+    | "while" {WHILE}
     | id {VAR (Lexing.lexeme lexbuf)}
     | int {INT (int_of_string (Lexing.lexeme lexbuf))}
     | eof {EOF}

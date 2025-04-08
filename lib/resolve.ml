@@ -92,6 +92,7 @@ let rec resolve_expr state = function
       let fin_state, res_e2 = resolve_expr inter_state e2 in
       (fin_state, Binary (op, res_e1, res_e2))
   | (Ast.Int _ | Ast.Bool _) as const -> (state, const)
+  | _ ->failwith "Functoin calls are missing"
 
 let rec resolve_stmt state = function
   | Ast.Return e ->
@@ -103,6 +104,7 @@ let rec resolve_stmt state = function
       let inter_state, res_rhs = resolve_expr state rhs in
       let fin_state, res_lhs = resolve_expr inter_state lhs in
       (fin_state, Assign { lhs = res_lhs; rhs = res_rhs })
+  | _ -> failwith "Remaining statements not resolved"
 
 and resolve_block state (Block stmts) =
   let fin_state, res_stmts = List.fold_left_map resolve_stmt state stmts in
