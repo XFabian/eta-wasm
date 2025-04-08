@@ -35,9 +35,14 @@ let compile stage src =
   let ast = parse_file src in
   print_endline (Ast.show_prog ast);
   if stage = Setting.Parse then ()
-  else let res_ast = Resolve.resolve ast in 
-   if stage = Setting.Validate then ()
-  else ()
-    (* let wtac = Wtac_gen.gen ast in
-    Wtac_print.print_wtac "test.c" wtac;
-    if stage = Setting.Wtac then () else Emit.emit wtac *)
+  else
+    let _res_vars_state, res_ast = Resolve.resolve ast in
+    print_endline (Ast.show_prog res_ast);
+    if stage = Setting.Validate then ()
+    else
+      let wtac = Wtac_gen.gen ast in
+      Wtac_print.print_wtac src wtac;
+      if stage = Setting.Wtac then ()
+       else 
+      let wat_file = Filename.chop_extension src ^ ".wat" in
+      Emit.emit wat_file wtac

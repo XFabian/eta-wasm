@@ -25,7 +25,12 @@ rule read =
     | "}" {RBRACE}
     | ":" {COLON}
     | "," {COMMA}
+    | "=" {EQUAL}
     | "int" {TINT}
+    | "bool" {TBOOL}
+    | "return" {RETURN}
+    | "true" {TRUE}
+    | "false" {FALSE}
     | id {VAR (Lexing.lexeme lexbuf)}
     | int {INT (int_of_string (Lexing.lexeme lexbuf))}
     | eof {EOF}

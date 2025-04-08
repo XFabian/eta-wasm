@@ -10,7 +10,6 @@ open Ast
 
 module StackMap = struct
   module StringMap = Map.Make (String)
-
   (* Global is not really necessary, since a variable is global
      if it is in the topmost scope *)
   type id_entry = { unique_name : string; global : bool }
@@ -24,6 +23,7 @@ module StackMap = struct
   let new_map () = { map_scope = [ StringMap.empty ] }
 
   let push ms =
+
     let m = StringMap.empty in
     { map_scope = m :: ms.map_scope }
 

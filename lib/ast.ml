@@ -1,18 +1,22 @@
 type bin_op = Add | Sub | Mult [@@deriving show]
-type expr = Int of int | Binary of bin_op * expr * expr [@@deriving show]
+
+type expr = | Var of string | Int of int | Bool of bool | Binary of bin_op * expr * expr
+[@@deriving show]
 
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
 [@@deriving show]
 
-type stmt = Expression of expr
-and block_item = S of stmt | LocalDecl of var_declaration
-and block = Block of block_item list
+type stmt = LocalDecl of var_declaration | Return of expr
+| Assign of {lhs:expr; rhs:expr}
+[@@deriving show]
+
+and block = Block of stmt list [@@deriving show]
 
 type func_declaration = {
   name : string;
   params : string list;
   f_type : Types.t;
-  body : expr;
+  body : block;
 }
 [@@deriving show]
 

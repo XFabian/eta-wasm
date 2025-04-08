@@ -2,6 +2,21 @@
  (name wasm_test)
  (preprocess
   (pps ppx_deriving.show))
+  (modules 
+  setting
+  compile
+  lexer
+  parser
+  unique_ids
+  ; symbols
+  types
+  ast
+  resolve
+  wtac
+  wtac_gen
+  wtac_print
+  emit
+  )
   )
 
 

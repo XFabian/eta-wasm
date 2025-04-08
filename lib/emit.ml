@@ -1,65 +1,90 @@
 (* Emits WASM code from the WTAC IR *)
 open Wtac
 
+let emit_type = function 
+| Types.Int -> "i64"
+| Types.Bool -> "i32"
+| _ -> failwith "Internal error. Other types do not have a representaiton in WASM"
 let emit_bin_op out = function
-  | Add -> Printf.fprintf out "i64.add\n"
-  | Sub -> Printf.fprintf out "i64.sub\n"
-  | Mult -> Printf.fprintf out "i64.mul\n"
+  | Add -> Format.fprintf out "i64.add"
+  | Sub -> Format.fprintf out "i64.sub"
+  | Mult -> Format .fprintf out "i64.mul"
 
 let show_unary_op = function
   | Negate -> "neg"
   | Not -> "not"
 
 let emit_value out = function
-  | Imm i -> Printf.fprintf out "i64.const %d\n" i
+  | Imm i -> Format.fprintf out "i64.const %d" i
   (* Ths should return the local index of that variable RIght now it returns the get
   which makes more sense*)
   (* TODO: Hard coded right now *)
-  | Var _ -> Printf.fprintf out "local.get 0 \n"
+  | Var x -> Format.fprintf out "local.get $%s" x
 
+let emit_dst out = function
+| Var name -> Format.fprintf out "local.set $%s@," name
+| Imm _ -> failwith "Internal Error: Should be a variable and not an immediate"
 let emit_instruction chan = function
-  | Return _ -> failwith "Return not implemented"
-  | Binary { op; src1; src2; dst } -> (
+  | Return v -> 
+    Format.fprintf chan "%a@,return@,"
+    emit_value v; 
+  | Copy {src; dst} -> 
+    (* TODO if that string is an array, then we need
+      to do something differently *)
+    emit_value chan src;
+    emit_dst chan dst;
+      
+
+  | Binary { op; src1; src2; dst } ->
       (* Put src1 and src2 on stack *)
-      emit_value chan src1;
-      emit_value chan src2;
+      Format.fprintf chan "%a@,%a@,%a@,%a"
+    emit_value src1 emit_value src2
       (* Cuurent stack [src2; src1] *)
       (* Use op to pop the 2 values and put result on stack *)
-      emit_bin_op chan op;
+      emit_bin_op  op
       (* [res] *)
       (* Copy into destination 
       Find to which local that corresponds
-      TODO Have a func_info record that recors all these additonal informations*)
-      match dst with
-      | Var name -> Printf.fprintf chan "local.set $%s\n" name
-      | Imm _ ->
-          failwith "Internal Error: Should be a variable and not an immediate")
+      *)
+     emit_dst dst;
   | Unary _ -> failwith "Unary not implemented"
 
 let emit_top_level chan = function
   | Function { name; body; locals; _ } ->
-      Printf.fprintf chan "(func $%s\n" name;
+      Format.fprintf chan "@[<v 2>(func $%s@," name;
 
       (* Define the locals of that function *)
 
-      (* TODO hard coded right now *)
-      List.iter (fun l -> Printf.fprintf chan "(local $%s i64)\n" l) locals;
+      (* TODO hard coded right now
+      Does not differentiate between arrays and where they are stored *)
+      List.iter (fun l -> Format.fprintf chan "(local $%s %s)@," l.name (emit_type l.t)) locals;
       List.iter (emit_instruction chan) body;
-      Printf.fprintf chan ")\n";
+      Format.fprintf chan ")@]@,";
       Printf.sprintf "(export \"%s\" (func $%s))" name name
-  | Data _ -> failwith "Internal Error: Not implemented right now"
+  | Data _ -> failwith "Internal Error: Data should have been handled already"
 
 (* TODO stack pointer data_end and heap_base need to be defined and exported *)
-let emit (Program decls) =
-  let out_chan = open_out "test.wat" in
+
+let preprocess_globals chan = function 
+    | Function _ as f -> Some f 
+    | Data {name; t; value} ->
+      Format.fprintf chan "@[(global $%s %s (%a))@]@," name (emit_type t) emit_value value;
+      None
+
+let emit wasm_file (Program decls) =
+  let out_chan = open_out wasm_file in
+  let formatter = Format.formatter_of_out_channel out_chan in
   (* define module memory tables etc, and the data *)
-  Printf.fprintf out_chan "(module\n";
-  let export_strings = List.map (emit_top_level out_chan) decls in
+  Format.fprintf formatter "@[<v 2>(module@,";
+  (* define all globals *)
+  let funcs = List.filter_map (preprocess_globals formatter) decls in
+
+  let export_strings = List.map (emit_top_level formatter) funcs in
   (* Last export all functions *)
   List.iter
-    (fun exp_func -> Printf.fprintf out_chan "%s\n" exp_func)
+    (fun exp_func -> Format.fprintf formatter "%s@," exp_func)
     export_strings;
-  Printf.fprintf out_chan ")";
+  Format.fprintf formatter ")@]@.";
   close_out out_chan
 
 (* This is valid (local i32 i32 i32 i32 i32) *)
