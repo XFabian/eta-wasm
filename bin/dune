@@ -1,4 +1,4 @@
 (executable
  (public_name wasm_test)
  (name main)
- (libraries wasm_test))
+ (libraries wasm_test cmdliner))

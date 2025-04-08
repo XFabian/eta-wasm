@@ -1,40 +1,50 @@
 open Wasm_test
+open Cmdliner
 
-let print_position out_channel (lexbuf : Lexing.lexbuf) =
-  let pos : Lexing.position = lexbuf.lex_curr_p in
-  Printf.fprintf out_channel "%s:Line %d: Col %d Next token %s" pos.pos_fname
-    pos.pos_lnum
-    (pos.pos_cnum - pos.pos_bol + 1)
-    (Lexing.lexeme lexbuf)
 
-let _parse (s : string) : Ast.prog =
-  let lexbuf = Lexing.from_string s in
-  let ast =
-    try Parser.prog Lexer.read lexbuf with
-    | Parser.Error ->
-        Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
-        exit (-1)
+
+(* TODO: I would like to have a small repl as well *)
+let driver stage src_f =
+  let _ = Compile.compile stage src_f in
+  exit 0
+
+
+
+
+
+let src_file =
+  Arg.(required & pos 0 (some non_dir_file) None & info [] ~docv:"file")
+
+let stage = 
+  let parse =
+    let doc = "Run the Parser" in
+    (Setting.Parse, Arg.info ["parse"] ~doc)
   in
-  ast
-
-let parse_file f_name =
-  let inx = open_in f_name in
-  let lexbuf = Lexing.from_channel inx in
-  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = f_name };
-  let ast =
-    try Parser.prog Lexer.read lexbuf with
-    | Parser.Error ->
-        close_in inx;
-        Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
-        exit (-1)
+  let validate  =
+    let doc = "Run the Semantic Analysis" in
+    (Setting.Validate, Arg.info ["validate"] ~doc)
   in
-  close_in inx;
-  ast
+  let wtac =
+      let doc = "Run the WTac Generation" in
+      (Setting.Wtac, Arg.info ["wtac"] ~doc)
+  in
+  let codegen =
+    let doc = "Run the Code Generation to WASM" in
+    (Setting.Codegen, Arg.info ["codegen"] ~doc)
+in
+  Arg.(value & Arg.vflag Setting.Codegen [parse; validate; wtac; codegen])
 
-let () =
-  let ast = parse_file "test.eta" in
-  (* let ast = parse "2 + 3 * 4" in *)
-  print_endline (Ast.show_prog ast);
-  let wtac = Wtac_gen.gen ast in
-  Wtac_print.print_wtac "test.c" wtac;
-  Emit.emit wtac
+
+(* $ applies evaluation of args onto evaluation of function driver
+   So it provides the arguments to driver (a -> b)t -> a t -> b t is the type
+   You can see the monaidc structure. That is bind *)
+let cmd =
+  let doc = "WEtac : A Eta compiler to WASM" in
+  let info = Cmd.info "wetac" ~doc in
+  Cmd.v info Term.(const driver $ stage $ src_file)
+
+let main () = Stdlib.exit (Cmd.eval cmd)
+let () = main ()
+
+  
+
