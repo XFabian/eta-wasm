@@ -26,6 +26,9 @@ rule read =
     | ":" {COLON}
     | "," {COMMA}
     | "=" {EQUAL}
+    | "!" {BANG}
+    | "|" {BAR}
+    | "&" {AND} 
     | "int" {TINT}
     | "bool" {TBOOL}
     | "return" {RETURN}

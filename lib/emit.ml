@@ -9,6 +9,8 @@ let emit_bin_op out = function
   | Add -> Format.fprintf out "i64.add"
   | Sub -> Format.fprintf out "i64.sub"
   | Mult -> Format .fprintf out "i64.mul"
+  | And -> Format .fprintf out "i32.and"
+  | Or -> Format .fprintf out "i32.or"
 
 let show_unary_op = function
   | Negate -> "neg"
@@ -50,6 +52,7 @@ let emit_instruction chan = function
       *)
      emit_dst dst;
   | Unary _ -> failwith "Unary not implemented"
+  | _ -> failwith "Jumps not implemented"
 
 let emit_top_level chan = function
   | Function { name; body; locals; _ } ->

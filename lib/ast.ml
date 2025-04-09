@@ -1,9 +1,11 @@
-type bin_op = Add | Sub | Mult [@@deriving show]
+type bin_op = Add | Sub | Mult | And | Or [@@deriving show]
 
+type unary_op = Not | Neg [@@deriving show]
 type expr =
   | Var of string
   | Int of int
   | Bool of bool
+  | Unary of unary_op * expr
   | Binary of bin_op * expr * expr
   | FunCall of {name:string; args : expr list}
 [@@deriving show]

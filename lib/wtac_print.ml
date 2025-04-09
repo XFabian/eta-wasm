@@ -10,6 +10,8 @@ let pp_bin_op out = function
   | Add -> Format.pp_print_string out "+"
   | Sub -> Format.pp_print_string out "-"
   | Mult -> Format.pp_print_string out "*"
+  | And -> Format.pp_print_string out "&"
+  | Or -> Format.pp_print_string out "|"
 
 let pp_value out = function
   | Imm i -> Format.pp_print_int out i
@@ -25,6 +27,10 @@ let pp_instruction out = function
         pp_value src2
   | Copy { src; dst } ->
     Format.fprintf out "%a = %a" pp_value dst pp_value src
+  | Label l -> 
+    Format.fprintf out "%a:" Format.pp_print_string l
+  | Jump l -> Format.fprintf out "Jmp(%s)" l
+  | CJump {cond; l1;l2} -> Format.fprintf out "br %a, %s, %s" pp_value cond l1 l2
 
 let pp_function_definition out name params _f_type body =
   (* Format.pp_set_margin out 40; *)

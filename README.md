@@ -124,3 +124,7 @@ So how about structs?
 We use the Eta language
 has ints and bools and arrays that are heap allocated
 Later on structs
+
+Article on intro for WASM: https://rsms.me/wasm-intro#addressing-memory
+and every byte of wasm 
+https://danielmangum.com/posts/every-byte-wasm-module/

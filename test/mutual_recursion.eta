@@ -1,0 +1,7 @@
+function1(a:int, b:int) : int {
+   return function2()
+}
+
+function2() : int {
+    return function1()
+}

@@ -1,5 +1,6 @@
 let counter = ref 0
 
+(* Maybe have a per function counter like LLVM has *)
 let make_temp () =
   let n = !counter in
   counter := n + 1;

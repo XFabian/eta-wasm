@@ -1,0 +1,29 @@
+add(a:int, b:int) {
+    return a + b
+}
+
+function1(a:int) :int {
+    if true {
+    }
+    if true if false x =5  else x = 7
+}
+
+functoinw() {
+    while true 
+    x =7
+    while false {
+        x = 5
+        x = 6
+    }
+    x = function1(2)
+    sameline()
+    testProc(x+1, y)
+}
+
+sameLine() {
+    x = 5 y =6
+}
+
+testProc(x:int, y:int) {
+
+}
