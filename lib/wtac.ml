@@ -1,4 +1,6 @@
-(* TAC IR for our language *)
+(* TAC IR for our language 
+Has structured control flow
+*)
 type unary_op = Negate | Not
 type binary_op = Add | Sub | Mult | And | Or
 
@@ -28,12 +30,13 @@ type instruction =
   | Binary of { op : binary_op; src1 : value; src2 : value; dst : value }
   | Copy of { src : value; dst : value }
   (* Sometimes called Move needed for assignments and declarations*)
-  (* Some discussion if we want to have name(x) as a value an dlet
-     Jump andCJump take values instead.
+  (* Blocks as in WASM
+  a br instruction exits the innermost block.
+  a br_if instruction
   *)
-  | Label of string
-  | Jump of string
-  | CJump of { cond : value; l1 : string; l2 : string }
+  | Block of { label : string; body : instruction list }
+  | Br of string
+  | BrIf of { cond : value; l : string }
 
 (* DATA is used for globals *)
 type top_level =
