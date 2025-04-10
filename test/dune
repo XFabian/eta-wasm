@@ -1,2 +1,5 @@
-(test
- (name test_wasm_test))
+(library
+ (name foo)
+ (inline_tests (deps (glob_files *.eta)))
+ (preprocess (pps ppx_expect ppx_sexp_conv))
+ (libraries wasm_test sexplib expect_test_helpers_core))

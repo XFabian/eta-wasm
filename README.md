@@ -128,3 +128,5 @@ Later on structs
 Article on intro for WASM: https://rsms.me/wasm-intro#addressing-memory
 and every byte of wasm 
 https://danielmangum.com/posts/every-byte-wasm-module/
+### Questions for language
+Global initialzier can be only a constant?

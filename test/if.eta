@@ -1,6 +1,6 @@
 functionIf(a:int) :int {
     x :int = -1 + 5
-    if true & false | true{
+    if true {
         a = 5
     }
     else {

@@ -20,7 +20,7 @@
  (name wasm_test)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml dune cmdliner)
+ (depends ocaml dune cmdliner sexplib expect_test_helpers_core ppx_expect ppx_sexp_conv)
  (tags
   (topics "to describe" your project)))
 

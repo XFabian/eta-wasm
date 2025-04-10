@@ -1,17 +1,20 @@
-type bin_op = Add | Sub | Mult | And | Or [@@deriving show]
+open Sexplib.Std
 
-type unary_op = Not | Neg [@@deriving show]
+(* Derives S-Expressions for base types *)
+type bin_op = Add | Sub | Mult | And | Or [@@deriving show, sexp]
+type unary_op = Not | Neg [@@deriving show, sexp]
+
 type expr =
   | Var of string
   | Int of int
   | Bool of bool
   | Unary of unary_op * expr
   | Binary of bin_op * expr * expr
-  | FunCall of {name:string; args : expr list}
-[@@deriving show]
+  | FunCall of { name : string; args : expr list }
+[@@deriving show, sexp]
 
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
-[@@deriving show]
+[@@deriving show, sexp]
 
 type stmt =
   | LocalDecl of var_declaration
@@ -21,9 +24,9 @@ type stmt =
   | If of { guard : expr; then_br : stmt; else_br : stmt option }
   | While of { guard : expr; body : stmt }
   | Procedure of { name : string; args : expr list }
-[@@deriving show]
+[@@deriving show, sexp]
 
-and block = Block of stmt list [@@deriving show]
+and block = Block of stmt list [@@deriving show, sexp]
 
 type func_declaration = {
   name : string;
@@ -31,9 +34,9 @@ type func_declaration = {
   f_type : Types.t;
   body : block;
 }
-[@@deriving show]
+[@@deriving show, sexp]
 
 type declaration = Global of var_declaration | FunDecl of func_declaration
-[@@deriving show]
+[@@deriving show, sexp]
 
-type prog = Program of declaration list [@@deriving show]
+type prog = Program of declaration list [@@deriving show, sexp]
