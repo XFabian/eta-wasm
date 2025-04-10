@@ -12,6 +12,14 @@ let pp_bin_op out = function
   | Mult -> Format.pp_print_string out "*"
   | And -> Format.pp_print_string out "&"
   | Or -> Format.pp_print_string out "|"
+  | Div -> Format.pp_print_string out "/"
+  | Mod -> Format.pp_print_string out "%"
+  | Lt -> Format.pp_print_string out "<"
+  | Leq -> Format.pp_print_string out "<=" 
+  | Gt -> Format.pp_print_string out ">"
+  | Geq -> Format.pp_print_string out ">="
+  | Eq -> Format.pp_print_string out "=="
+  | Neq -> Format.pp_print_string out "!="
 
 let pp_value out = function
   | Imm i -> Format.pp_print_int out i

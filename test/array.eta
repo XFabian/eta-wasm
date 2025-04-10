@@ -1,0 +1,20 @@
+// I amte not understanding the array declarationsyntax
+// b : int[3][4] is valid but also intialzies an array. However, size is not part of the type
+// to what are these arrays initialized????
+// Can we have {x,} or {1+2,}?
+// Functoin calls as well when they return an array??
+//     f(x)[2] =3 compiler I saw has such a case
+// No we disallow this
+functionA(a:int) :int {
+    c :int[2][3]
+    x :int[][] = 2
+    b : int[]  = 4
+    c  : int[] = {}
+    c : int [2][2] = {{1,2}, {3,4}}
+    c : int[3][4]
+    s: int[] =  "Hello"
+    s: int[] = "Hello" + {13, 10,}
+    x, y = y, x
+    b[1] = 5
+    c[2][3] = 4
+}

@@ -1,4 +1,4 @@
 (executable
- (public_name wasm_test)
+ (public_name wetac)
  (name main)
  (libraries wetac cmdliner))

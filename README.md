@@ -1,4 +1,5 @@
-Testing how compilation works to WebAssembly 
+aTesting how compilation works to WebAssembly 
+
 
 Starting with simple expressoins and going to variables etc.
 
@@ -119,14 +120,41 @@ or
 
 So how about structs? 
 
-
-
-We use the Eta language
-has ints and bools and arrays that are heap allocated
-Later on structs
+S
 
 Article on intro for WASM: https://rsms.me/wasm-intro#addressing-memory
 and every byte of wasm 
 https://danielmangum.com/posts/every-byte-wasm-module/
+
+
+A [GADT example](https://blog.mads-hartmann.com/ocaml/2015/01/05/gadt-ocaml.html)
 ### Questions for language
 Global initialzier can be only a constant?
+
+
+#### Problems with arraysdune runt
+Declaringg arrays with a size sucks. this sizes are not part of the type so it is shitty to parse. But you ned those specifications to at least do somthing with them.
+
+This is probably checked during type checking or not.
+It sucks that the type is used to contain additoinal infomration that is not part of the type
+
+You cannot modify the size of an array here.
+We do not need to specify th elengths when we have an initlaizeor. Since we know the size then
+Access to an array is a memry location after a call to malloc
+
+you can declare x:int[] but it is not useful except when its a function paramter
+you need x = y or something to init that array. Otherwise not usable!
+
+So what is the point?
+I get it in functoin arguments.
+But not in declarations
+allos x: int[n] for dynamic sizes but disallow this [] bullshit
+You need th esize to allocate neough mem
+
+I understand now
+x[3][] allocates space for 3 pointers to arrays. That is why we assign arrays to x[0] etc.
+These arrays themselves can be somewehere else and are not layed out at teh same space
+x[3][4] should be layed out in that way. Since we know all sizes statically.
+
+So it is not a problem actually. Still a little bit annoying.
+A parameter should not have a size (x : int[3]) not allowed that is not a type

@@ -1,25 +1,49 @@
 open Sexplib.Std
 
 (* Derives S-Expressions for base types *)
-type bin_op = Add | Sub | Mult | And | Or [@@deriving show, sexp]
+type bin_op =
+  | Add
+  | Sub
+  | Mult
+  | Div
+  | Mod
+  | And
+  | Or
+  | Lt
+  | Leq
+  | Gt
+  | Geq
+  | Eq
+  | Neq
+[@@deriving show, sexp]
+
 type unary_op = Not | Neg [@@deriving show, sexp]
 
 type expr =
   | Var of string
   | Int of int
   | Bool of bool
+  (* Array literals like "Hello" and {1,2,3,4} *)
+  | ArrayLit of expr list 
   | Unary of unary_op * expr
   | Binary of bin_op * expr * expr
   | FunCall of { name : string; args : expr list }
+  (* a[1] for example or a[2][3] Subscript(a, Subscript 2 ,3) *)
+  | Subscript of expr * expr
 [@@deriving show, sexp]
 
+(* Need to have array_declaration here, since that keeps track of the dimension
+which I need
+ *)
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
 [@@deriving show, sexp]
 
 type stmt =
   | LocalDecl of var_declaration
+  (* We need to keep track of the dimension like c : int[2][] will have Some 2: None *)
+  | ArrayDecl of {name: string; a_type: Types.t; dims : expr option list; init : expr option}
   | Return of expr
-  | Assign of { lhs : expr; rhs : expr }
+  | Assign of { lhs : expr list; rhs : expr list }
   | Compound of block
   | If of { guard : expr; then_br : stmt; else_br : stmt option }
   | While of { guard : expr; body : stmt }

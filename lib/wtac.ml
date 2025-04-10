@@ -1,8 +1,22 @@
-(* TAC IR for our language 
-Has structured control flow
+(* TAC IR for our language
+   Has structured control flow
 *)
 type unary_op = Negate | Not
-type binary_op = Add | Sub | Mult | And | Or
+
+type binary_op =
+  | Add
+  | Sub
+  | Mult
+  | Div
+  | Mod
+  | And
+  | Or
+  | Lt
+  | Leq
+  | Gt
+  | Geq
+  | Eq
+  | Neq
 
 (* Maybe record that information somewhere. So during one function we can record all
    created variable
@@ -12,15 +26,6 @@ type binary_op = Add | Sub | Mult | And | Or
 (* Maybe it should be a map from string to type *)
 type obj = { name : string; t : Types.t }
 
-(* | Div
-   | Mod
-
-   | Eq
-   | Neq
-   | Lt
-   | Leq
-   | Gt
-   | Geq *)
 
 type value = Imm of int | Var of string
 
@@ -31,8 +36,8 @@ type instruction =
   | Copy of { src : value; dst : value }
   (* Sometimes called Move needed for assignments and declarations*)
   (* Blocks as in WASM
-  a br instruction exits the innermost block.
-  a br_if instruction
+     a br instruction exits the innermost block.
+     a br_if instruction
   *)
   | Block of { label : string; body : instruction list }
   | Br of string

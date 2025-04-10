@@ -14,6 +14,7 @@ let emit_bin_op out = function
   | Mult -> Format.fprintf out "i64.mul"
   | And -> Format.fprintf out "i32.and"
   | Or -> Format.fprintf out "i32.or"
+  | _ -> failwith "Not impemented"
 
 let show_unary_op = function
   | Negate -> "i64.sub"

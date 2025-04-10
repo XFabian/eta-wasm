@@ -8,14 +8,15 @@
   lexer
   parser
   unique_ids
+  ; sexp_printer
   ; symbols
   types
   ast
-  resolve
-  wtac
-  wtac_gen
-  wtac_print
-  emit
+  ; resolve
+  ; wtac
+  ; wtac_gen
+  ; wtac_print
+  ; emit
   )
   (libraries sexplib)
   )

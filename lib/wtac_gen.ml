@@ -30,6 +30,14 @@ let convert_binop = function
   | Mult -> W.Mult
   | And -> W.And
   | Or -> W.Or
+  | Div -> W.Div
+  | Mod -> W.Mod
+  | Lt -> W.Lt
+  | Leq -> W.Leq
+  | Gt -> W.Gt
+  | Geq -> W.Geq
+  | Eq -> W.Eq
+  | Neq-> W.Neq
 
 let rec expr_gen = function
   | Ast.Int i -> ([], Wtac.Imm i)

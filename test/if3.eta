@@ -1,0 +1,9 @@
+functionIf(a:int) :int {
+    x :bool = 2 >= 3
+    t = 2 == 3
+    if x & false 
+        a = 5
+    else 
+        a = 7
+    return a
+}
