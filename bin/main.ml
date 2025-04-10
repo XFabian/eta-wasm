@@ -1,4 +1,4 @@
-open Wasm_test
+open Wetac
 open Cmdliner
 
 

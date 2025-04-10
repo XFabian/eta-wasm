@@ -1,4 +1,4 @@
-open Wasm_test
+open Wetac
 (* Cram tests are an alternative. I think I want to tryto use them as well *)
 (* Install pretty printer
 #install_printer Sexplib.Sexp.pp_hum
@@ -10,12 +10,30 @@ Expect_test_helpers_kernel.print_s *)
    [%sexp_of: Ast.prog] ast)
   |> Expect_test_helpers_core.print_s;
   [%expect {| 3 |}] *)
+open Printf
+let%expect_test "simple_precedence" = 
+  let ast = Compile.parse_expr "2 + 3 * 8"in
+  printf "%s" (Ast.show_expr ast);
+  [%expect {|
+    (Ast.Binary (Ast.Add, (Ast.Int 2),
+       (Ast.Binary (Ast.Mult, (Ast.Int 3), (Ast.Int 8))))) |}]
+
+let %expect_test "dangling_else" = 
+  let ast = Compile.parse_stmt "if true if false x = 5 else x = 3" in
+  printf "%s" (Ast.show_stmt ast);
+  [%expect {|
+    Ast.If {guard = (Ast.Bool true);
+      then_br =
+      Ast.If {guard = (Ast.Bool false);
+        then_br = Ast.Assign {lhs = (Ast.Var "x"); rhs = (Ast.Int 5)};
+        else_br = (Some Ast.Assign {lhs = (Ast.Var "x"); rhs = (Ast.Int 3)})};
+      else_br = None} |}]
 
 let%expect_test "simple" =
-  (let ast = Compile.parse_file "test.eta" in
-   [%sexp_of: Ast.prog] ast)
-  |> Expect_test_helpers_core.print_s;
-  [%expect
+(let ast = Compile.parse_file "test.eta" in
+  [%sexp_of: Ast.prog] ast)
+|> Expect_test_helpers_core.print_s;
+[%expect
     {|
     (Program (
       (Global ((name x) (init ((Int 5))) (var_type Int)))

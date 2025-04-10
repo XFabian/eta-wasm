@@ -1,7 +1,7 @@
 (lang dune 3.16)
 
 (using menhir 3.0)
-(name wasm_test)
+(name wetac)
 
 (generate_opam_files true)
 
@@ -17,7 +17,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name wasm_test)
+ (name wetac)
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends ocaml dune cmdliner sexplib expect_test_helpers_core ppx_expect ppx_sexp_conv)

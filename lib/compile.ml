@@ -17,6 +17,25 @@ let _parse (s : string) : Ast.prog =
   in
   ast
 
+let parse_expr (s :string) : Ast.expr = 
+  let lexbuf = Lexing.from_string s in
+  let ast =
+    try Parser.expr_top Lexer.read lexbuf with
+    | Parser.Error ->
+        Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
+        exit (-1)
+  in
+  ast
+
+  let parse_stmt (s :string) : Ast.stmt = 
+    let lexbuf = Lexing.from_string s in
+    let ast =
+      try Parser.stmt_top Lexer.read lexbuf with
+      | Parser.Error ->
+          Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
+          exit (-1)
+    in
+    ast
 let parse_file f_name =
   let inx = open_in f_name in
   let lexbuf = Lexing.from_channel inx in

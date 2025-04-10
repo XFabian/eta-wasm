@@ -1,5 +1,5 @@
 (library
- (name wasm_test)
+ (name wetac)
  (preprocess
   (pps ppx_deriving.show ppx_sexp_conv))
   (modules 

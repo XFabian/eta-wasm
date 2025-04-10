@@ -25,6 +25,8 @@
 %nonassoc IF
 %nonassoc ELSE
 
+%start <Ast.stmt> stmt_top
+%start <Ast.expr> expr_top
 %start <Ast.prog> prog
 %%
 
@@ -63,6 +65,9 @@ type_spec:
 
 block:
     | block_items = list(stmt) {Block block_items}
+
+stmt_top:
+    | s =stmt; EOF {s}
 stmt: 
     | RETURN ; e = expr {Return e}
     | name = VAR; ty = type_spec init = option(EQUAL e=expr {e}) %prec EQUAL
@@ -75,6 +80,8 @@ stmt:
     | name = VAR LPAREN; args=separated_list(COMMA,expr) RPAREN {Procedure {name; args}}
     ;
 
+expr_top:
+    | e =expr ; EOF {e}
 expr:
     | name = VAR {Var name}
     | i = INT {Int i}
