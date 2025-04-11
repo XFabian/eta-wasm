@@ -24,7 +24,7 @@ type expr =
   | Int of int
   | Bool of bool
   (* Array literals like "Hello" and {1,2,3,4} *)
-  | ArrayLit of expr list 
+  | ArrayLit of expr list
   | Unary of unary_op * expr
   | Binary of bin_op * expr * expr
   | FunCall of { name : string; args : expr list }
@@ -41,8 +41,13 @@ type var_declaration = { name : string; init : expr option; var_type : Types.t }
 type stmt =
   | LocalDecl of var_declaration
   (* We need to keep track of the dimension like c : int[2][] will have Some 2: None *)
-  | ArrayDecl of {name: string; a_type: Types.t; dims : expr option list; init : expr option}
-  | Return of expr
+  | ArrayDecl of {
+      name : string;
+      a_type : Types.t;
+      dims : expr option list;
+      init : expr option;
+    }
+  | Return of expr list
   | Assign of { lhs : expr list; rhs : expr list }
   | Compound of block
   | If of { guard : expr; then_br : stmt; else_br : stmt option }

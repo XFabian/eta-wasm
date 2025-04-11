@@ -56,7 +56,7 @@ declarations:
     | var = var_decl {Global var}
     ;
 func_decl:
-    | name = VAR; LPAREN; params_and_types=params ; RPAREN; ret_type = option(COLON t= type_spec {t});
+    | name = VAR; LPAREN; params_and_types=params ; RPAREN; ret_type = option(COLON ts= separated_list(COMMA, type_spec) {ts});
     LBRACE; body = block ; RBRACE {
         let params, types = match params_and_types with 
         | [] -> [], []
@@ -98,7 +98,7 @@ block:
 stmt_top:
     | s =stmt; EOF {s}
 stmt: 
-    | RETURN ; e = expr {Return e}
+    | RETURN ; es = separated_list(COMMA, expr) {Return es}
     | arr_decl_stmt {$1}
     // Not arrats
     | name = VAR; COLON; ty = prim_type init = option(EQUAL e=expr {e}) %prec EQUAL

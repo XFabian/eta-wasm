@@ -4,7 +4,7 @@ type t =
   | Int
   | Bool
   | Array of { elem_type : t }
-  | FunType of { param_types : t list; ret_type : t option }
+  | FunType of { param_types : t list; ret_type : t list option }
 [@@deriving show, sexp]
 
 let comma_sep out () = Format.fprintf out ", "
@@ -14,8 +14,18 @@ let rec pp (fmt : Format.formatter) = function
   | Bool -> Format.fprintf fmt "bool"
   | Array { elem_type } -> Format.fprintf fmt "%a[]" pp elem_type
   | FunType { param_types; ret_type } -> (
-      let list_fmt = Format.pp_print_list ~pp_sep:comma_sep pp in
+      let list_fmt =
+        match param_types with
+        | [] -> Format.sprintf "()"
+        | pts ->
+            Format.asprintf "(%a)"
+              (Format.pp_print_list ~pp_sep:comma_sep pp)
+              pts
+      in
       (* Ugly but works for now *)
       match ret_type with
-      | None -> Format.fprintf fmt "%a -> ()" list_fmt param_types
-      | Some t -> Format.fprintf fmt "%a -> %a" list_fmt param_types pp t)
+      | None -> Format.fprintf fmt "%s -> ()" list_fmt
+      | Some ts ->
+          Format.fprintf fmt "%s -> %a" list_fmt
+            (Format.pp_print_list ~pp_sep:comma_sep pp)
+            ts)

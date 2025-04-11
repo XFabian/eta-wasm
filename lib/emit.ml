@@ -4,6 +4,8 @@ open Wtac
 let emit_type = function
   | Types.Int -> "i64"
   | Types.Bool -> "i32"
+  (* TODO : Not sure if right. But array is a pointer  *)
+  | Types.Array _ -> "i32"
   | _ ->
       failwith
         "Internal error. Other types do not have a representaiton in WASM"
@@ -28,17 +30,31 @@ instructoins and values should have a type *)
   (* Ths should return the local index of that variable RIght now it returns the get
   which makes more sense*)
   (* TODO: Hard coded right now *)
-  | Var x -> Format.fprintf out "local.get $%s" x
+  | Var x -> (
+      match Symbols.get_opt x with
+      | Some { attr = Symbols.Local; _ } -> Format.fprintf out "local.get $%s" x
+      | Some { attr = Symbols.Global; _ } ->
+          Format.fprintf out "global.get $%s" x
+      | _ -> failwith "Internal Error: Variable not found during Emit")
+  | Mem _ -> failwith "Memory not implemented"
 
 let emit_dst out = function
-  | Var name -> Format.fprintf out "local.set $%s" name
+  | Var name -> (
+      match Symbols.get_opt name with
+      | Some { attr = Symbols.Local; _ } ->
+          Format.fprintf out "local.set $%s" name
+      | Some { attr = Symbols.Global; _ } ->
+          Format.fprintf out "global.set $%s" name
+      | _ -> failwith "Internal Error: Variable not found during Emit")
+  | Mem _ -> failwith "Memo not implemented in emit"
   | Imm _ ->
       failwith "Internal Error: Should be a variable and not an immediate"
 
 let empty ppf () = Format.fprintf ppf ""
 
 let rec emit_instruction chan = function
-  | Return v -> Format.fprintf chan "%a@,return@," emit_value v
+  | Return [ v ] -> Format.fprintf chan "%a@,return@," emit_value v
+  | Return _ -> failwith "Handle only single return value right now"
   | Copy { src; dst } ->
       (* TODO if that string is an array, then we need
       to do something differently *)
@@ -69,6 +85,9 @@ let rec emit_instruction chan = function
         label
         (Format.pp_print_list ~pp_sep:empty emit_instruction)
         body
+  | FCall { name; args; dst } ->
+      Format.pp_print_list emit_value chan args;
+      Format.fprintf chan "@,call $%s@,%a@," name emit_dst dst
 
 let emit_top_level chan = function
   | Function
@@ -81,9 +100,11 @@ let emit_top_level chan = function
       Format.fprintf chan "@[<v 2>(func $%s " name;
       Format.pp_print_list pp_v chan combined_pt;
       (match ret_type with
-      | Some r_t -> Format.fprintf chan "(result %s)@," (emit_type r_t)
+      | Some [ r_t ] -> Format.fprintf chan "(result %s)@," (emit_type r_t)
+      | Some _ -> failwith "Multiple return types are not supported right now"
       | None -> Format.fprintf chan "@,");
 
+      (* TODO check that out in Rust by returning a typle *)
       (* Define the locals of that function *)
 
       (* TODO hard coded right now

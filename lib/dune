@@ -9,14 +9,15 @@
   parser
   unique_ids
   ; sexp_printer
-  ; symbols
+  symbols
   types
   ast
-  ; resolve
-  ; wtac
-  ; wtac_gen
-  ; wtac_print
-  ; emit
+  resolve
+  typecheck
+  wtac
+  wtac_gen
+  wtac_print
+  emit
   )
   (libraries sexplib)
   )

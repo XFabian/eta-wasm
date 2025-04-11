@@ -15,6 +15,7 @@ let make_wtac_var ?name ty =
     | Some x -> x
     | None -> Unique_ids.make_temp ()
   in
+  Symbols.add_local_var dst_name ty;
   let obj : Wtac.obj = { name = dst_name; t = ty } in
   vars := obj :: !vars;
   (* Symbols.add_var ~f_name dst_name ty; *)
@@ -37,7 +38,7 @@ let convert_binop = function
   | Gt -> W.Gt
   | Geq -> W.Geq
   | Eq -> W.Eq
-  | Neq-> W.Neq
+  | Neq -> W.Neq
 
 let rec expr_gen = function
   | Ast.Int i -> ([], Wtac.Imm i)
@@ -57,6 +58,10 @@ let rec expr_gen = function
       let w_bin = W.Binary { op = w_op; src1 = v_e1; src2 = v_e2; dst } in
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
+  | FunCall { name; args } ->
+      let dst = make_wtac_var Types.Int in
+      let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
+      (List.flatten arg_instrs @ [ W.FCall { name; args = arg_vals; dst } ], dst)
   | _ -> failwith "WTac not implemented"
 
 and gen_unary op e =
@@ -68,72 +73,10 @@ and gen_unary op e =
   let instrs = e_instr @ [ w_un ] in
   (instrs, dst)
 
-(* Naive way for and expressions
-and gen_and_exp e1 e2 =
-  let e1_instr, src1 = expr_gen e1 in
-  let e2_instr, src2 = expr_gen e2 in
-  let false_label = Unique_ids.make_label "and_false" in
-  let dst = make_wtac_var Types.Int in
-  let end_label = Unique_ids.make_label "and_end" in
-  (* CJump is a bit annoying since we need to mark the immediate locas as well
-    and jump there. So there is a straightline jump added there.
-    TODO. Check what LLVM does for that or if that is optimized away *)
-  let e1_true_label = Unique_ids.make_label "and_true1_" in
-  let e2_true_label = Unique_ids.make_label "and_true2_" in
-  let instructions =
-    e1_instr
-    @ [
-        W.CJump { cond = src1; l1 = e1_true_label; l2 = false_label };
-        Label e1_true_label;
-      ]
-    @ e2_instr
-    @ [
-        CJump { cond = src2; l1 = e2_true_label; l2 = false_label };
-        Label e2_true_label;
-        Copy { src = W.Imm 1; dst };
-        Jump end_label;
-        Label false_label;
-        Copy { src = W.Imm 0; dst };
-        Label end_label;
-      ]
-  in
-  (instructions, dst)
-(* Naive way for or expressions *)
-
-and gen_or_exp e1 e2 =
-  let e1_instr, src1 = expr_gen e1 in
-  let e2_instr, src2 = expr_gen e2 in
-  let true_label = Unique_ids.make_label "or_true" in
-  let dst = make_wtac_var Types.Int in
-  let end_label = Unique_ids.make_label "or_end" in
-  (* CJump is a bit annoying since we need to mark the immediate locas as well
-    and jump there. So there is a straightline jump added there.
-    TODO. Check what LLVM does for that or if that is optimized away *)
-  let e1_false_label = Unique_ids.make_label "or_false1_" in
-  let e2_false_label = Unique_ids.make_label "or_false2_" in
-  let instructions =
-    e1_instr
-    @ [
-        W.CJump { cond = src1; l1 = true_label; l2 = e1_false_label };
-        Label e1_false_label;
-      ]
-    @ e2_instr
-    @ [
-        CJump { cond = src2; l1 = true_label; l2 = e2_false_label };
-        Label e2_false_label;
-        Copy { src = W.Imm 0; dst };
-        Jump end_label;
-        Label true_label;
-        Copy { src = W.Imm 1; dst };
-        Label end_label;
-      ]
-  in
-  (instructions, dst) *)
-
 let rec stmt_gen = function
-  | Ast.Return e ->
-      let instrs, res = expr_gen e in
-      instrs @ [ Return res ]
+  | Ast.Return es ->
+      let instrs_ls, res_ls = List.map expr_gen es |> List.split in
+      List.concat instrs_ls @ [ Return res_ls ]
   | Ast.LocalDecl { name; init; var_type } -> (
       (* Ignore delcaration if it does not have an initializer.
          TODO: Wrong it still can be assigned to
@@ -145,11 +88,30 @@ let rec stmt_gen = function
           let dst = make_wtac_var ~name var_type in
           (* Symbols.add_var ~f_name name var_type; *)
           instrs @ [ W.Copy { src = res; dst } ])
+  | Ast.ArrayDecl _decl -> failwith "Not handling arrays right now"
   | Ast.Assign { lhs; rhs } ->
-      let instrs_rhs, rhs_res = expr_gen rhs in
+      let instrs_rhs, rhs_res = List.map expr_gen rhs |> List.split in
       (* TODO with arrays this will be trickier *)
-      let instrs_lhs, lhs_res = expr_gen lhs in
-      instrs_lhs @ instrs_rhs @ [ W.Copy { src = rhs_res; dst = lhs_res } ]
+      let instrs_lhs, lhs_res = List.map expr_gen lhs |> List.split in
+      (* generate a copy for each pair 
+      TODO This does not work. This can be unbalanced
+      right now x,y = add() which returns 2 elements
+      Function can return a multi value 
+      Also rhs needs to be copied into temporaries and then transfered*)
+
+      let dst_rhs, rhs_instrs_copies =
+        List.fold_left_map
+          (fun acc rhs ->
+            let dst = make_wtac_var Types.Int in
+            (acc @ [ dst ], W.Copy { src = rhs; dst }))
+          [] rhs_res
+      in
+      let copies =
+        List.combine lhs_res dst_rhs
+        |> List.map (fun (lhs, rhs) -> W.Copy { src = rhs; dst = lhs })
+      in
+      List.concat instrs_rhs @ List.concat instrs_lhs @ rhs_instrs_copies
+      @ copies
   | Ast.Compound (Block bl) -> List.concat_map stmt_gen bl
   | If { guard; then_br; else_br } ->
       let else_label = Unique_ids.make_label "if_else" in
@@ -166,7 +128,7 @@ let rec stmt_gen = function
             label = else_label;
             body =
               (instrs
-              @ W.[ BrIf { cond = dst; l = end_label } ]
+              @ W.[ BrIf { cond = dst; l = else_label } ]
               @ else_instrs
               @ W.[ Br end_label ]);
           }

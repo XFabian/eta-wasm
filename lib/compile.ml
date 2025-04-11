@@ -17,7 +17,7 @@ let _parse (s : string) : Ast.prog =
   in
   ast
 
-let parse_expr (s :string) : Ast.expr = 
+let parse_expr (s : string) : Ast.expr =
   let lexbuf = Lexing.from_string s in
   let ast =
     try Parser.expr_top Lexer.read lexbuf with
@@ -27,15 +27,16 @@ let parse_expr (s :string) : Ast.expr =
   in
   ast
 
-  let parse_stmt (s :string) : Ast.stmt = 
-    let lexbuf = Lexing.from_string s in
-    let ast =
-      try Parser.stmt_top Lexer.read lexbuf with
-      | Parser.Error ->
-          Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
-          exit (-1)
-    in
-    ast
+let parse_stmt (s : string) : Ast.stmt =
+  let lexbuf = Lexing.from_string s in
+  let ast =
+    try Parser.stmt_top Lexer.read lexbuf with
+    | Parser.Error ->
+        Printf.fprintf stderr "Parsing Error at: %a\n" print_position lexbuf;
+        exit (-1)
+  in
+  ast
+
 let parse_file f_name =
   let inx = open_in f_name in
   let lexbuf = Lexing.from_channel inx in
@@ -52,16 +53,15 @@ let parse_file f_name =
 
 let compile stage src =
   let ast = parse_file src in
-  print_endline (Ast.show_prog ast);
-  if stage = Setting.Parse then ()
-  else ()
-    (* let _res_vars_state, res_ast = Resolve.resolve ast in
+  if stage = Setting.Parse then print_endline (Ast.show_prog ast)
+  else
+    let _res_vars_state, res_ast = Resolve.resolve ast in
     print_endline (Ast.show_prog res_ast);
+    Typecheck.typecheck res_ast;
     if stage = Setting.Validate then ()
     else
       let wtac = Wtac_gen.gen ast in
-      Wtac_print.print_wtac src wtac;
-      if stage = Setting.Wtac then ()
-       else 
-      let wat_file = Filename.chop_extension src ^ ".wat" in
-      Emit.emit wat_file wtac *)
+      if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
+      else
+        let wat_file = Filename.chop_extension src ^ ".wat" in
+        Emit.emit wat_file wtac

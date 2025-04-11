@@ -7,6 +7,7 @@
    so that we can recover the origina names
 *)
 open Ast
+
 (* State could contain current functoin as well
 So we could start at 0 for each function and rename parameters according to the function they are in
 Since functoin names need to be unique *)
@@ -79,34 +80,57 @@ let resolve_local_var_decl_helper state name =
       let new_state = StackMap.add name new_entry state in
       (new_state, unique_name)
 
-let resolve_local_var_decl state (vdecl : var_declaration) =
-  let new_state, unique_name = resolve_local_var_decl_helper state vdecl.name in
-  (new_state, { vdecl with name = unique_name })
-
 (* Unique names is for shadowing in nested blocks *)
 let rec resolve_expr state = function
   | Ast.Var x -> (
       match StackMap.find_opt x state with
-      | Some entry ->  Var entry.unique_name
+      | Some entry -> Var entry.unique_name
       | None -> failwith "Duplicate Variable found")
+  | Ast.Unary (op, e) ->
+      let res_e = resolve_expr state e in
+      Unary (op, res_e)
   | Ast.Binary (op, e1, e2) ->
       let res_e1 = resolve_expr state e1 in
       let res_e2 = resolve_expr state e2 in
       Binary (op, res_e1, res_e2)
   | (Ast.Int _ | Ast.Bool _) as const -> const
-  | _ -> failwith "Functoin calls are missing"
+  | FunCall { name; args } -> (
+      match StackMap.find_opt name state with
+      | None -> failwith "Function not declared!"
+      | Some entry ->
+          let args_res = List.map (resolve_expr state) args in
+          FunCall { name = entry.unique_name; args = args_res })
+  | ArrayLit es -> ArrayLit (List.map (resolve_expr state) es)
+  | Subscript (e1, e2) ->
+      let res_e1 = resolve_expr state e1 in
+      let res_e2 = resolve_expr state e2 in
+      Subscript (res_e1, res_e2)
+
+let resolve_local_var_decl state (vdecl : var_declaration) =
+  let new_state, unique_name = resolve_local_var_decl_helper state vdecl.name in
+  let init_res = Option.map (resolve_expr new_state) vdecl.init in
+  (new_state, { vdecl with name = unique_name; init = init_res })
 
 (* TODO: I probably do not need to return the state here *)
 let rec resolve_stmt state = function
   | Ast.Return e ->
-      let res_e = resolve_expr state e in
+      let res_e = List.map (resolve_expr state) e in
       (state, Return res_e)
   | LocalDecl vdecl ->
       let fin_state, res_vdecl = resolve_local_var_decl state vdecl in
       (fin_state, LocalDecl res_vdecl)
+  | ArrayDecl decl ->
+      let fin_state, unique_name =
+        resolve_local_var_decl_helper state decl.name
+      in
+      let init_res = Option.map (resolve_expr fin_state) decl.init in
+      let dims_res = List.map (Option.map (resolve_expr fin_state)) decl.dims in
+      ( fin_state,
+        ArrayDecl
+          { decl with name = unique_name; dims = dims_res; init = init_res } )
   | Assign { lhs; rhs } ->
-      let res_rhs = resolve_expr state rhs in
-      let res_lhs = resolve_expr state lhs in
+      let res_rhs = List.map (resolve_expr state) rhs in
+      let res_lhs = List.map (resolve_expr state) lhs in
       (state, Assign { lhs = res_lhs; rhs = res_rhs })
   | Compound bl ->
       let new_state = StackMap.push state in
@@ -124,14 +148,14 @@ let rec resolve_stmt state = function
         If { guard = res_guard; then_br = res_then; else_br = res_else }
       in
       (fin_state, if_res)
-  | While {guard; body} ->
-    let res_guard = resolve_expr state guard in
-    let fin_state, res_body = resolve_stmt state body in 
-    let res_while = While {guard = res_guard; body = res_body} in 
-    (fin_state, res_while)
-  | Procedure {name; args} ->
+  | While { guard; body } ->
+      let res_guard = resolve_expr state guard in
+      let fin_state, res_body = resolve_stmt state body in
+      let res_while = While { guard = res_guard; body = res_body } in
+      (fin_state, res_while)
+  | Procedure { name; args } ->
       let res_args = List.map (resolve_expr state) args in
-      (state, Procedure{name; args = res_args})
+      (state, Procedure { name; args = res_args })
 
 and resolve_block state (Block stmts) =
   let fin_state, res_stmts = List.fold_left_map resolve_stmt state stmts in
@@ -145,7 +169,11 @@ let resolve_function state { name; params; f_type; body } =
   match StackMap.find_opt_curr name state with
   | Some _entry -> failwith (Printf.sprintf "Function %s already defined" name)
   | None ->
-      let new_scope = StackMap.push state in
+      let open StackMap in
+      let n_state =
+        StackMap.add name { unique_name = name; global = true } state
+      in
+      let new_scope = StackMap.push n_state in
       let inner_scope, res_params = resolve_params new_scope params in
       let fin_state, new_body = resolve_block inner_scope body in
       ( StackMap.pop fin_state,
@@ -155,11 +183,15 @@ let resolve_top_level state = function
   | Ast.FunDecl fn ->
       let fin_state, res_fn = resolve_function state fn in
       (fin_state, FunDecl res_fn)
-  | Global v_decl ->
-      let open StackMap in
-      let entry = { unique_name = v_decl.name; global = true } in
-      let fin_state = StackMap.add v_decl.name entry state in
-      (fin_state, Global v_decl)
+  | Global v_decl -> (
+      match StackMap.find_opt_curr v_decl.name state with
+      | Some _entry ->
+          failwith (Printf.sprintf "Global %s already defined" v_decl.name)
+      | None ->
+          let open StackMap in
+          let entry = { unique_name = v_decl.name; global = true } in
+          let fin_state = StackMap.add v_decl.name entry state in
+          (fin_state, Global v_decl))
 
 let resolve (Ast.Program decls) =
   let init_state = StackMap.new_map () in

@@ -26,11 +26,12 @@ type binary_op =
 (* Maybe it should be a map from string to type *)
 type obj = { name : string; t : Types.t }
 
-
-type value = Imm of int | Var of string
+(* Mem should be a value as well for arrays for example
+Copy with a mem *)
+type value = Imm of int | Var of string | Mem of string
 
 type instruction =
-  | Return of value
+  | Return of value list
   | Unary of { op : unary_op; src : value; dst : value }
   | Binary of { op : binary_op; src1 : value; src2 : value; dst : value }
   | Copy of { src : value; dst : value }
@@ -39,6 +40,7 @@ type instruction =
      a br instruction exits the innermost block.
      a br_if instruction
   *)
+  | FCall of { name : string; args : value list; dst : value }
   | Block of { label : string; body : instruction list }
   | Br of string
   | BrIf of { cond : value; l : string }

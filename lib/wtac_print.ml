@@ -15,7 +15,7 @@ let pp_bin_op out = function
   | Div -> Format.pp_print_string out "/"
   | Mod -> Format.pp_print_string out "%"
   | Lt -> Format.pp_print_string out "<"
-  | Leq -> Format.pp_print_string out "<=" 
+  | Leq -> Format.pp_print_string out "<="
   | Gt -> Format.pp_print_string out ">"
   | Geq -> Format.pp_print_string out ">="
   | Eq -> Format.pp_print_string out "=="
@@ -24,9 +24,13 @@ let pp_bin_op out = function
 let pp_value out = function
   | Imm i -> Format.pp_print_int out i
   | Var s -> Format.pp_print_string out s
+  | Mem s -> Format.fprintf out "[%s]" s
 
 let rec pp_instruction out = function
-  | Return v -> Format.fprintf out "Return(%a)" pp_value v
+  | Return v ->
+      Format.fprintf out "Return %a"
+        (Format.pp_print_list ~pp_sep:comma_sep pp_value)
+        v
   | Unary { op; src; dst } ->
       Format.fprintf out "%a = %a%a" pp_value dst pp_un_op op pp_value src
   | Binary { op; src1; src2; dst } ->
@@ -39,6 +43,10 @@ let rec pp_instruction out = function
         body
   | Br l -> Format.fprintf out "br %s" l
   | BrIf { cond; l } -> Format.fprintf out "br %a, %s" pp_value cond l
+  | FCall { name; args; dst } ->
+      Format.fprintf out "%a = %s (%a) " pp_value dst name
+        (Format.pp_print_list ~pp_sep:comma_sep pp_value)
+        args
 
 let pp_function_definition out name params _f_type body =
   (* Format.pp_set_margin out 40; *)
