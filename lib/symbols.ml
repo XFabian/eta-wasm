@@ -1,7 +1,11 @@
-(* IMPORTANT This is currently not used and not needed
- *)
 (* TODO: Probably do not need globals since I track them using the DATA type *)
-type attrs = Fun of { bytes_required : int } | Global | Local
+(* Defined is used for interface type to track if function is defined or
+  implemented. Modules can only declar functions *)
+type attrs =
+  | Fun of { defined : bool; bytes_required : int; global : bool }
+  | Global
+  | Local
+
 type entry = { t : Types.t; attr : attrs }
 
 (* Since every declaration has a unique name across functoins
@@ -18,6 +22,10 @@ let modify k f =
 let add_local_var name ty =
   Hashtbl.replace symbol_table name { t = ty; attr = Local }
 
+let add_fun name ty defined =
+  Hashtbl.replace symbol_table name
+    { t = ty; attr = Fun { defined; bytes_required = 0; global = true } }
+
 let add_global_var name ty =
   Hashtbl.replace symbol_table name { t = ty; attr = Global }
 
@@ -26,4 +34,5 @@ let add_global_var name ty =
   Hashtbl.replace symbol_table name { t = ty } *)
 let get name = Hashtbl.find symbol_table name
 let get_opt name = Hashtbl.find_opt symbol_table name
+let remove name = Hashtbl.remove symbol_table name
 let bindings () = Hashtbl.to_seq symbol_table |> List.of_seq

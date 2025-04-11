@@ -56,11 +56,15 @@ declarations:
     | var = var_decl {Global var}
     ;
 func_decl:
-    | name = VAR; LPAREN; params_and_types=params ; RPAREN; ret_type = option(COLON ts= separated_list(COMMA, type_spec) {ts});
+    | name = VAR; LPAREN; params_and_types=params ; RPAREN; ret_type_opt = option(COLON ts= separated_list(COMMA, type_spec) {ts});
     LBRACE; body = block ; RBRACE {
         let params, types = match params_and_types with 
         | [] -> [], []
         | params_and_types -> List.split params_and_types  
+        in 
+        let ret_type = match ret_type_opt with 
+        | Some rs -> rs
+        | None -> []
         in 
         let f_type = Types.FunType {param_types=types; ret_type} in
         {name; params; f_type; body}

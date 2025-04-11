@@ -100,9 +100,9 @@ let emit_top_level chan = function
       Format.fprintf chan "@[<v 2>(func $%s " name;
       Format.pp_print_list pp_v chan combined_pt;
       (match ret_type with
-      | Some [ r_t ] -> Format.fprintf chan "(result %s)@," (emit_type r_t)
-      | Some _ -> failwith "Multiple return types are not supported right now"
-      | None -> Format.fprintf chan "@,");
+      | [ r_t ] -> Format.fprintf chan "(result %s)@," (emit_type r_t)
+      | [] -> Format.fprintf chan "@,"
+      | _ -> failwith "Multiple return types are not supported right now");
 
       (* TODO check that out in Rust by returning a typle *)
       (* Define the locals of that function *)

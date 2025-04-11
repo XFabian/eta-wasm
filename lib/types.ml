@@ -6,7 +6,7 @@ type t =
   (* Used for _ and {} so where the type depends on the context *)
   | Unknown
   | Array of { elem_type : t }
-  | FunType of { param_types : t list; ret_type : t list option }
+  | FunType of { param_types : t list; ret_type : t list }
 [@@deriving show, sexp]
 
 let comma_sep out () = Format.fprintf out ", "
@@ -27,8 +27,8 @@ let rec pp (fmt : Format.formatter) = function
       in
       (* Ugly but works for now *)
       match ret_type with
-      | None -> Format.fprintf fmt "%s -> ()" list_fmt
-      | Some ts ->
+      | [] -> Format.fprintf fmt "%s -> ()" list_fmt
+      | ts ->
           Format.fprintf fmt "%s -> %a" list_fmt
             (Format.pp_print_list ~pp_sep:comma_sep pp)
             ts)

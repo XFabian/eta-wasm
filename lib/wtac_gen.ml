@@ -15,8 +15,13 @@ let make_wtac_var ?name ty =
     | Some x -> x
     | None -> Unique_ids.make_temp ()
   in
-  Symbols.add_local_var dst_name ty;
-  let obj : Wtac.obj = { name = dst_name; t = ty } in
+  let t =
+    match ty with
+    | [ t ] -> t
+    | _ -> failwith "Internal Error: A variable cannot have multiple types"
+  in
+  Symbols.add_local_var dst_name t;
+  let obj : Wtac.obj = { name = dst_name; t } in
   vars := obj :: !vars;
   (* Symbols.add_var ~f_name dst_name ty; *)
   W.Var dst_name
@@ -46,28 +51,26 @@ let rec expr_gen = function
   | Bool false -> ([], Wtac.Imm 0)
   | Var x -> ([], Wtac.Var x)
   | Unary (op, e) -> gen_unary op e
-  | Binary (And, _, _)
-  | Binary (Or, _, _) ->
-      failwith "And and or not implemented"
   | Binary (op, e1, e2) ->
       let e1_instr, v_e1 = expr_gen e1 in
       let e2_instr, v_e2 = expr_gen e2 in
       let w_op = convert_binop op in
-      (* TODO typing is wrong here! *)
-      let dst = make_wtac_var Types.Int in
+      let e_ty = Typecheck.typecheck_expr e1 in
+      let dst = make_wtac_var e_ty in
       let w_bin = W.Binary { op = w_op; src1 = v_e1; src2 = v_e2; dst } in
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
   | FunCall { name; args } ->
-      let dst = make_wtac_var Types.Int in
+      (* TODO : For type need to lookup function call *)
+      let dst = make_wtac_var [ Types.Int ] in
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
       (List.flatten arg_instrs @ [ W.FCall { name; args = arg_vals; dst } ], dst)
   | _ -> failwith "WTac not implemented"
 
 and gen_unary op e =
   let e_instr, v_e = expr_gen e in
-  (* TODO wrong type! *)
-  let dst = make_wtac_var Types.Int in
+  let e_ty = Typecheck.typecheck_expr e in
+  let dst = make_wtac_var e_ty in
   let w_op = convert_unop op in
   let w_un = W.Unary { op = w_op; src = v_e; dst } in
   let instrs = e_instr @ [ w_un ] in
@@ -85,7 +88,7 @@ let rec stmt_gen = function
       | None -> []
       | Some e ->
           let instrs, res = expr_gen e in
-          let dst = make_wtac_var ~name var_type in
+          let dst = make_wtac_var ~name [ var_type ] in
           (* Symbols.add_var ~f_name name var_type; *)
           instrs @ [ W.Copy { src = res; dst } ])
   | Ast.ArrayDecl _decl -> failwith "Not handling arrays right now"
@@ -102,7 +105,7 @@ let rec stmt_gen = function
       let dst_rhs, rhs_instrs_copies =
         List.fold_left_map
           (fun acc rhs ->
-            let dst = make_wtac_var Types.Int in
+            let dst = make_wtac_var [ Types.Int ] in
             (acc @ [ dst ], W.Copy { src = rhs; dst }))
           [] rhs_res
       in
