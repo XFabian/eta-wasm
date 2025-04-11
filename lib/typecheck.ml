@@ -79,7 +79,13 @@ let rec typecheck_expr e : Types.t list =
           e1_ty
       | _ -> failwith "Tried to apply Binary op to wrong types!")
   | Ast.FunCall { name; args } -> typecheck_fun_call name args
-  | Ast.Subscript (_, _) -> failwith "Not implemented"
+  | Ast.Subscript (e1, e2) -> (
+      let arr_t = typecheck_expr e1 in
+      let idx_t = typecheck_expr e2 in
+      match (arr_t, idx_t) with
+      | [ Types.Array { elem_type } ], [ Types.Int ] -> [ elem_type ]
+      | _, [ Types.Int ] -> failwith "Trying to index into non-array"
+      | _, _ -> failwith "Array Index must be an integer")
 
 (* TODO: Fun calls can only appear on the rhs of assignments *)
 (* Useful for function calls and procedures *)

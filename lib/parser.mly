@@ -118,11 +118,8 @@ stmt:
     ;
 lval:
     | name = VAR {Var name}
-    | name = VAR; sub=arr_test {Subscript(Var name, sub)}
+    | lv = lval ; LBRACK e= expr RBRACK {Subscript(lv, e)}
     
-arr_test:
-    | LBRACK i = INT RBRACK {Int i}  
-    | arr = arr_test LBRACK i = INT RBRACK {Subscript(arr, Int i)}  
 
 arr_decl_stmt:
     | name = VAR; COLON; pt= prim_type; 
@@ -142,11 +139,19 @@ arr_decl_stmt:
     }
 
 
-
+arr_sub: 
+    | LBRACK e = expr RBRACK {e}  
+    | arr = arr_sub LBRACK e= expr RBRACK {Subscript(arr, e)}  
 // ----------------------------------
 expr_top:
     | e =expr ; EOF {e}
-expr:
+
+expr : 
+    | postfix_expr {$1} 
+postfix_expr:
+    | primary_expr {$1}
+    | e = postfix_expr; LBRACK e1= expr RBRACK {Subscript(e, e1)}
+primary_expr:
     | name = VAR {Var name}
     | UNDERSCORE {Var "_"}
     | i = INT {Int i}
