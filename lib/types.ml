@@ -32,3 +32,14 @@ let rec pp (fmt : Format.formatter) = function
           Format.fprintf fmt "%s -> %a" list_fmt
             (Format.pp_print_list ~pp_sep:comma_sep pp)
             ts)
+
+let is_arr = function
+  | Array _ -> true
+  | _ -> false
+
+let get_size = function 
+  | Int -> 8
+  | Bool -> 4 
+  (* Arrays are stored as a pointer in the heap *)
+  | Array _ -> 4
+  | FunType _ | Unknown-> failwith "Internal Error: Function Types and Unknown do not have a size"

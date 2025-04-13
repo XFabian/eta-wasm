@@ -10,25 +10,31 @@ let emit_type = function
       failwith
         "Internal error. Other types do not have a representaiton in WASM"
 
+(* Equal and not equal depend on type of operands 
+Similar for add*)
 let emit_bin_op out = function
   | Add -> Format.fprintf out "i64.add"
   | Sub -> Format.fprintf out "i64.sub"
   | Mult -> Format.fprintf out "i64.mul"
   | And -> Format.fprintf out "i32.and"
   | Or -> Format.fprintf out "i32.or"
-  | _ -> failwith "Not impemented"
+  | Lt -> Format.fprintf out "i64.lt_s"
+  | Leq -> Format.fprintf out "i64.le_s" 
+  | Gt -> Format.fprintf out "i64.gt_s" 
+  | Geq -> Format.fprintf out "i64.ge_s"
+  | _ -> failwith "Equal and not equal Not impemented"
 
 let show_unary_op = function
   | Negate -> "i64.sub"
   | Not -> "i32.eqz"
 
 let emit_value out = function
-  (*  I would like to have for booleans the i32 type
-So I need to pass in that informatin from somewhere
-instructoins and values should have a type *)
+  (* I would like to have for booleans the i32 type
+     So I need to pass in that informatin from somewhere
+     instructoins and values should have a type *)
   | Imm i -> Format.fprintf out "i64.const %d" i
   (* Ths should return the local index of that variable RIght now it returns the get
-  which makes more sense*)
+     which makes more sense*)
   (* TODO: Hard coded right now *)
   | Var x -> (
       match Symbols.get_opt x with
@@ -36,7 +42,11 @@ instructoins and values should have a type *)
       | Some { attr = Symbols.Global; _ } ->
           Format.fprintf out "global.get $%s" x
       | _ -> failwith "Internal Error: Variable not found during Emit")
-  | Mem _ -> failwith "Memory not implemented"
+  | Mem name -> 
+    (match Symbols.get_opt name with
+    | Some {t=Types.Array{elem_type}; _} -> Format.fprintf out "%s.load"(emit_type elem_type)
+    | _ -> failwith "Internal Error: Memory should have array type"
+    )
 
 let emit_dst out = function
   | Var name -> (
@@ -46,7 +56,13 @@ let emit_dst out = function
       | Some { attr = Symbols.Global; _ } ->
           Format.fprintf out "global.set $%s" name
       | _ -> failwith "Internal Error: Variable not found during Emit")
-  | Mem _ -> failwith "Memo not implemented in emit"
+  | Mem name -> 
+    (* TODO to emit a certain store, we need the type info here
+    We need to know if we store a bool, int or a ptr *)
+      (match Symbols.get_opt name with
+    | Some {t=Types.Array{elem_type}; _} -> Format.fprintf out "%s.store"(emit_type elem_type)
+    | _ -> failwith "Internal Error: Memory should have array type"
+    )
   | Imm _ ->
       failwith "Internal Error: Should be a variable and not an immediate"
 
@@ -55,10 +71,14 @@ let empty ppf () = Format.fprintf ppf ""
 let rec emit_instruction chan = function
   | Return [ v ] -> Format.fprintf chan "%a@,return@," emit_value v
   | Return _ -> failwith "Handle only single return value right now"
+  | Copy { src; dst=Mem name } ->
+    (* We store at Mem *)
+    Format.fprintf chan "local.get %s@,%a@,%a@," name emit_value src emit_dst (Mem name)
   | Copy { src; dst } ->
       (* TODO if that string is an array, then we need
-      to do something differently *)
+         to do something differently *)
       Format.fprintf chan "%a@,%a@," emit_value src emit_dst dst
+  
   | Unary { op = Negate; src; dst } ->
       Format.fprintf chan "i64.const 0@,%a@,%s@,%a@," emit_value src
         (show_unary_op Negate) emit_dst dst
@@ -72,9 +92,9 @@ let rec emit_instruction chan = function
         (* Use op to pop the 2 values and put result on stack *)
         emit_bin_op op
         (* [res] *)
-        (* Copy into destination 
-      Find to which local that corresponds
-      *)
+        (* Copy into destination
+           Find to which local that corresponds
+        *)
         emit_dst dst
   | Br l -> Format.fprintf chan "br $%a@," Format.pp_print_string l
   | BrIf { cond; l } ->
@@ -85,9 +105,19 @@ let rec emit_instruction chan = function
         label
         (Format.pp_print_list ~pp_sep:empty emit_instruction)
         body
+  | Loop { label; body } ->
+      Format.fprintf chan "@[<v 2>(loop $%a@,%a@])@," Format.pp_print_string
+        label
+        (Format.pp_print_list ~pp_sep:empty emit_instruction)
+        body
   | FCall { name; args; dst } ->
       Format.pp_print_list emit_value chan args;
-      Format.fprintf chan "@,call $%s@,%a@," name emit_dst dst
+      (* TODO: For multi value not working *)
+      (match dst with 
+      | Some d ->
+      Format.fprintf chan "@,call $%s@,%a@," name emit_dst d
+      | None -> Format.fprintf chan "@,call $%s@," name)
+  | _ -> failwith "Load and store not implemnted"
 
 let emit_top_level chan = function
   | Function
@@ -108,7 +138,7 @@ let emit_top_level chan = function
       (* Define the locals of that function *)
 
       (* TODO hard coded right now
-      Does not differentiate between arrays and where they are stored *)
+         Does not differentiate between arrays and where they are stored *)
       List.iter
         (fun l -> Format.fprintf chan "(local $%s %s)@," l.name (emit_type l.t))
         locals;

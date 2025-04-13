@@ -37,16 +37,30 @@ let rec pp_instruction out = function
       Format.fprintf out "%a = %a %a %a" pp_value dst pp_value src1 pp_bin_op op
         pp_value src2
   | Copy { src; dst } -> Format.fprintf out "%a = %a" pp_value dst pp_value src
+  | Load { src_ptr; dst } ->
+      Format.fprintf out "%a = Load(%a)" pp_value dst pp_value src_ptr
+  | Store { src; dst_ptr } ->
+      Format.fprintf out "%a = GetAddress(%a)" pp_value dst_ptr pp_value src
   | Block { label; body } ->
       Format.fprintf out "@[<v 2>block %a:@, %a@]" Format.pp_print_string label
         (Format.pp_print_list pp_instruction)
         body
+  | Loop { label; body } ->
+      Format.fprintf out "@[<v 2>loop %a:@, %a@]" Format.pp_print_string label
+        (Format.pp_print_list pp_instruction)
+        body
   | Br l -> Format.fprintf out "br %s" l
   | BrIf { cond; l } -> Format.fprintf out "br %a, %s" pp_value cond l
-  | FCall { name; args; dst } ->
-      Format.fprintf out "%a = %s (%a) " pp_value dst name
-        (Format.pp_print_list ~pp_sep:comma_sep pp_value)
-        args
+  | FCall { name; args; dst } -> (
+      match dst with
+      | Some d ->
+          Format.fprintf out "%a = %s (%a) " pp_value d name
+            (Format.pp_print_list ~pp_sep:comma_sep pp_value)
+            args
+      | None ->
+          Format.fprintf out "%s (%a) " name
+            (Format.pp_print_list ~pp_sep:comma_sep pp_value)
+            args)
 
 let pp_function_definition out name params _f_type body =
   (* Format.pp_set_margin out 40; *)

@@ -1,0 +1,10 @@
+
+
+functoinT () {
+    c : int[3]
+    // a : int[2][3]
+    //b : int[2][]
+    g : int = c[1]
+    f: int 
+    g, f = c[1], c[2]
+}

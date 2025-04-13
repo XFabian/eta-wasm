@@ -29,7 +29,12 @@ type obj = { name : string; t : Types.t }
 (* Mem should be a value as well for arrays for example
 Copy with a mem *)
 type value = Imm of int | Var of string | Mem of string
-
+(* Mem is used to represent the memory locatoin of something.
+So we sometimes convert to it. We use it to differentiate in Copy if
+  we just assign or we do a load or store
+Copy(Mem()), 2) stores at Mem where Mem is dst
+Copy (x, Mem) loads a value from Mem and stores it in x
+Maybe at an offset to Mem*)
 type instruction =
   | Return of value list
   | Unary of { op : unary_op; src : value; dst : value }
@@ -40,8 +45,12 @@ type instruction =
      a br instruction exits the innermost block.
      a br_if instruction
   *)
-  | FCall of { name : string; args : value list; dst : value }
+  
+  | Load of {src_ptr: value; dst: value}
+  | Store of {src: value; dst_ptr: value}
+  | FCall of { name : string; args : value list; dst : value option}
   | Block of { label : string; body : instruction list }
+  | Loop of {label : string; body : instruction list}
   | Br of string
   | BrIf of { cond : value; l : string }
 

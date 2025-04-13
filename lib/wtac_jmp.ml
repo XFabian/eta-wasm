@@ -1,0 +1,60 @@
+(* Used with the extended relooper algortihm to trasnform it to wasm*)
+
+(* TAC IR for our language
+   Has structured control flow
+*)
+type unary_op = Negate | Not
+
+type binary_op =
+  | Add
+  | Sub
+  | Mult
+  | Div
+  | Mod
+  | And
+  | Or
+  | Lt
+  | Leq
+  | Gt
+  | Geq
+  | Eq
+  | Neq
+
+(* Maybe record that information somewhere. So during one function we can record all
+   created variable
+   then we reset it in the end
+   Very ugly rioght now
+*)
+(* Maybe it should be a map from string to type *)
+type obj = { name : string; t : Types.t }
+
+(* Mem should be a value as well for arrays for example
+Copy with a mem *)
+type value = Imm of int | Var of string | Mem of string
+
+type instruction =
+  | Return of value list
+  | Unary of { op : unary_op; src : value; dst : value }
+  | Binary of { op : binary_op; src1 : value; src2 : value; dst : value }
+  | Copy of { src : value; dst : value }
+  | Load of {src_ptr: value; dst: value}
+  | Store of {src: value; dst_ptr: value}
+  | FCall of { name : string; args : value list; dst : value }
+  | Label of string
+  | Jump of string
+  | JumpC of { cond : value; l : string }
+
+(* DATA is used for globals *)
+type top_level =
+  | Function of {
+      name : string;
+      body : instruction list;
+      params : string list;
+      f_type : Types.t;
+      locals : obj list;
+    }
+    (* After semantic nalysis we know that init has to be a literal const!
+       Arrays are not initialzed in global *)
+  | Data of { name : string; t : Types.t; value : value }
+
+type program = Program of top_level list

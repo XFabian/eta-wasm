@@ -60,7 +60,7 @@ let compile stage src =
     Typecheck.typecheck res_ast;
     if stage = Setting.Validate then ()
     else
-      let wtac = Wtac_gen.gen ast in
+      let wtac = Wtac_gen.gen res_ast in
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in

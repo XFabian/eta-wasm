@@ -63,12 +63,14 @@ let rec typecheck_expr e : Types.t list =
       | Mult
       | Div
       | Mod
+      when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
+        e1_ty
       | Lt
       | Leq
       | Gt
       | Geq
-        when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
-          e1_ty
+      when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
+        [Types.Bool]
       | And
       | Or
         when e1_ty = [ Types.Bool ] && e2_ty = [ Types.Bool ] ->
@@ -76,7 +78,7 @@ let rec typecheck_expr e : Types.t list =
       | Eq
       | Neq
         when e1_ty = e2_ty ->
-          e1_ty
+          [Types.Bool]
       | _ -> failwith "Tried to apply Binary op to wrong types!")
   | Ast.FunCall { name; args } -> typecheck_fun_call name args
   | Ast.Subscript (e1, e2) -> (
@@ -116,7 +118,7 @@ and typecheck_fun_call name args =
 
 let typecheck_arr_decl name t dims init =
   (* Check out dimensions Convert dims with value to true empty ones to false
-  [1][][2] -> true, false, true*)
+     [1][][2] -> true, false, true*)
   let dims_b = List.map Option.is_some dims in
   (* If false we check if the rest has a true. then its an error *)
   let rec dim_check_cont ds =
@@ -130,11 +132,11 @@ let typecheck_arr_decl name t dims init =
     | [] -> ()
   in
   dim_check_cont dims_b;
-  (* Only indices with type Int in dimensions 
-  So remove all None values and check their types*)
+  (* Only indices with type Int in dimensions
+     So remove all None values and check their types*)
   let dims_t = dims |> List.filter_map Fun.id |> List.map typecheck_expr in
   (* A function call [f(x)] is not allowed to return two elements
-  Right now the list [[int], [int]] etc. SO if there are two elements its wrong*)
+     Right now the list [[int], [int]] etc. SO if there are two elements its wrong*)
   List.iter
     (fun eds ->
       match eds with
@@ -144,16 +146,15 @@ let typecheck_arr_decl name t dims init =
 
   (* If one dim is specified we cannot have an initialzier *)
   let dim_spec = List.exists Fun.id dims_b in
-  match init with
+  (match init with
   | Some e ->
       if dim_spec then
         failwith "Cannot specify dimensions and initialize array. Not allowed"
       else
         let e_t = typecheck_expr e in
         if [ t ] <> e_t then failwith "Initializer has wrong type for the array"
-  | None ->
-      ();
-      Symbols.add_local_var name t
+  | None -> ());
+  Symbols.add_local_var name t
 
 let rec typecheck_stmt ret_type = function
   | Ast.Return es ->
@@ -177,8 +178,8 @@ let rec typecheck_stmt ret_type = function
       if not (List.for_all is_lval lhs) then
         failwith "Not all expression on lhs are lvalues!"
       else
-        (* This unfolds function calls to its reutnr types. So 
-        this is really the amount of expressions that will be assigned to lhs *)
+        (* This unfolds function calls to its reutnr types. So
+           this is really the amount of expressions that will be assigned to lhs *)
         let rhs_t = List.concat_map typecheck_expr rhs in
         (* List.iter (fun a -> print_endline (Types.show a)) rhs_t; *)
         let lhs_t = List.concat_map typecheck_expr lhs in
@@ -189,11 +190,16 @@ let rec typecheck_stmt ret_type = function
           failwith "Types of LHS and RHS are mismatched"
   | Ast.Compound (Block bl) -> List.iter (typecheck_stmt ret_type) bl
   | Ast.If { guard; then_br; else_br } ->
-      let _e_t = typecheck_expr guard in
-      typecheck_stmt ret_type then_br;
+      let e_t = typecheck_expr guard in
+      if e_t <> [ Types.Bool ] then failwith "Guard of If has to have type Bool"
+      else typecheck_stmt ret_type then_br;
       let _ = Option.map (typecheck_stmt ret_type) else_br in
       ()
-  | Ast.While _ -> failwith "Statement typecheck not implemented"
+  | Ast.While { guard; body } ->
+      let e_t = typecheck_expr guard in
+      if e_t <> [Types.Bool] then failwith "Guard of While has to have type Bool"
+      else typecheck_stmt ret_type body;
+      ()
   | Ast.Procedure { name; args } -> (
       let ret_t = fun_helper name args in
       (* Return has to have some value otherwise it would be a procedure *)
