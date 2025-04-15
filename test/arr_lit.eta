@@ -1,0 +1,6 @@
+arr_lit () : int {
+    // a : int[] = {1, 2, 3}
+    b : int[][] = {{1,2}, {3,4}}
+    // c : int[] = {} Not working
+    return b[1][1]
+}

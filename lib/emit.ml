@@ -86,14 +86,18 @@ let emit_dst out = function
   | Imm _ ->
       failwith "Internal Error: Should be a variable and not an immediate"
 
+let emit_dst_mem t out  = function 
+| Mem _name -> 
+  Format.fprintf out "%s.store" (emit_wtype t)
+| _ as v -> emit_dst out v
 let empty ppf () = Format.fprintf ppf ""
 
 let rec emit_instruction chan = function
   | Return [ v ] -> Format.fprintf chan "%a@,return@," emit_value v
   | Return _ -> failwith "Handle only single return value right now"
-  | Copy { src; dst=Mem name; _ } ->
+  | Copy { src; dst=Mem name; t } ->
     (* We store at Mem *)
-    Format.fprintf chan "local.get $%s@,%a@,%a@," name emit_value src emit_dst (Mem name)
+    Format.fprintf chan "local.get $%s@,%a@,%a@," name emit_value src (emit_dst_mem t) (Mem name)
   | Copy { src; dst; _ } ->
       (* TODO if that string is an array, then we need
          to do something differently *)
