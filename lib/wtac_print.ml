@@ -2,6 +2,9 @@ open Wtac
 
 let comma_sep out () = Format.fprintf out ", "
 
+let pp_type out = function
+  | I32 -> Format.pp_print_string out "i32"
+  | I64 -> Format.pp_print_string out "i64"
 let pp_un_op out = function
   | Negate -> Format.pp_print_string out "-"
   | Not -> Format.pp_print_string out "!"
@@ -22,7 +25,7 @@ let pp_bin_op out = function
   | Neq -> Format.pp_print_string out "!="
 
 let pp_value out = function
-  | Imm i -> Format.pp_print_int out i
+  | Imm (i, _) -> Format.pp_print_int out i
   | Var s -> Format.pp_print_string out s
   | Mem s -> Format.fprintf out "[%s]" s
 
@@ -33,10 +36,10 @@ let rec pp_instruction out = function
         v
   | Unary { op; src; dst } ->
       Format.fprintf out "%a = %a%a" pp_value dst pp_un_op op pp_value src
-  | Binary { op; src1; src2; dst } ->
-      Format.fprintf out "%a = %a %a %a" pp_value dst pp_value src1 pp_bin_op op
+  | Binary { op; src1; src2; dst; t } ->
+      Format.fprintf out "%a : %a = %a %a %a" pp_value dst pp_type t pp_value src1 pp_bin_op op
         pp_value src2
-  | Copy { src; dst } -> Format.fprintf out "%a = %a" pp_value dst pp_value src
+  | Copy { src; dst; _ } -> Format.fprintf out "%a = %a" pp_value dst pp_value src
   | Load { src_ptr; dst } ->
       Format.fprintf out "%a = Load(%a)" pp_value dst pp_value src_ptr
   | Store { src; dst_ptr } ->

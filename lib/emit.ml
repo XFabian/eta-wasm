@@ -10,19 +10,25 @@ let emit_type = function
       failwith
         "Internal error. Other types do not have a representaiton in WASM"
 
+let emit_wtype = function 
+| Wtac.I32 -> "i32"
+| I64 -> "i64"
 (* Equal and not equal depend on type of operands 
 Similar for add*)
-let emit_bin_op out = function
-  | Add -> Format.fprintf out "i64.add"
-  | Sub -> Format.fprintf out "i64.sub"
-  | Mult -> Format.fprintf out "i64.mul"
-  | And -> Format.fprintf out "i32.and"
-  | Or -> Format.fprintf out "i32.or"
-  | Lt -> Format.fprintf out "i64.lt_s"
-  | Leq -> Format.fprintf out "i64.le_s" 
-  | Gt -> Format.fprintf out "i64.gt_s" 
-  | Geq -> Format.fprintf out "i64.ge_s"
+let emit_bin_op t out op = 
+  let op_t = match op with 
+  | Add -> "add"
+  | Sub -> "sub"
+  | Mult -> "mul"
+  | And -> "and"
+  | Or -> "or"
+  | Lt -> "lt_s"
+  | Leq -> "le_s" 
+  | Gt -> "gt_s" 
+  | Geq -> "ge_s"
   | _ -> failwith "Equal and not equal Not impemented"
+  in 
+  Format.fprintf out "%s.%s" (emit_wtype t) op_t
 
 let show_unary_op = function
   | Negate -> "i64.sub"
@@ -32,7 +38,9 @@ let emit_value out = function
   (* I would like to have for booleans the i32 type
      So I need to pass in that informatin from somewhere
      instructoins and values should have a type *)
-  | Imm i -> Format.fprintf out "i64.const %d" i
+  | Imm (i, t) -> 
+    Format.fprintf out "%s.const %d" (emit_wtype t) i
+
   (* Ths should return the local index of that variable RIght now it returns the get
      which makes more sense*)
   (* TODO: Hard coded right now *)
@@ -44,10 +52,22 @@ let emit_value out = function
       | _ -> failwith "Internal Error: Variable not found during Emit")
   | Mem name -> 
     (match Symbols.get_opt name with
-    | Some {t=Types.Array{elem_type}; _} -> Format.fprintf out "%s.load"(emit_type elem_type)
+    | Some {t=Types.Array{elem_type}; attr} -> 
+      let sel = match attr with 
+    | Symbols.Local -> Format.sprintf "local.get $%s" name
+    | Global -> Format.sprintf "global.get $%s" name
+    | _ -> failwith "Internal Error: Mem should not have Function attributes"
+    in
+      Format.fprintf out "%s@, %s.load" sel (emit_type elem_type)
     | _ -> failwith "Internal Error: Memory should have array type"
     )
 
+(* Overwrite type of immediate
+TODO: Ulgy used as hack for binary ops to enfore that operands have same type
+as binary op *)
+let emit_value2 t out = function 
+| Imm(i, _) -> Format.fprintf out "%s.const %d" (emit_wtype t) i
+| _ as c -> emit_value out c
 let emit_dst out = function
   | Var name -> (
       match Symbols.get_opt name with
@@ -71,10 +91,10 @@ let empty ppf () = Format.fprintf ppf ""
 let rec emit_instruction chan = function
   | Return [ v ] -> Format.fprintf chan "%a@,return@," emit_value v
   | Return _ -> failwith "Handle only single return value right now"
-  | Copy { src; dst=Mem name } ->
+  | Copy { src; dst=Mem name; _ } ->
     (* We store at Mem *)
-    Format.fprintf chan "local.get %s@,%a@,%a@," name emit_value src emit_dst (Mem name)
-  | Copy { src; dst } ->
+    Format.fprintf chan "local.get $%s@,%a@,%a@," name emit_value src emit_dst (Mem name)
+  | Copy { src; dst; _ } ->
       (* TODO if that string is an array, then we need
          to do something differently *)
       Format.fprintf chan "%a@,%a@," emit_value src emit_dst dst
@@ -85,12 +105,12 @@ let rec emit_instruction chan = function
   | Unary { op = Not; src; dst } ->
       Format.fprintf chan "%a@,%s@,%a@," emit_value src (show_unary_op Not)
         emit_dst dst
-  | Binary { op; src1; src2; dst } ->
+  | Binary { op; src1; src2; dst; t = wt } ->
       (* Put src1 and src2 on stack *)
-      Format.fprintf chan "%a@,%a@,%a@,%a@," emit_value src1 emit_value src2
+      Format.fprintf chan "%a@,%a@,%a@,%a@," (emit_value2 wt) src1 (emit_value2 wt) src2
         (* Cuurent stack [src2; src1] *)
         (* Use op to pop the 2 values and put result on stack *)
-        emit_bin_op op
+        (emit_bin_op wt) op
         (* [res] *)
         (* Copy into destination
            Find to which local that corresponds
@@ -140,7 +160,7 @@ let emit_top_level chan = function
       (* TODO hard coded right now
          Does not differentiate between arrays and where they are stored *)
       List.iter
-        (fun l -> Format.fprintf chan "(local $%s %s)@," l.name (emit_type l.t))
+        (fun l -> Format.fprintf chan "(local $%s %s)@," l.name (emit_wtype l.t))
         locals;
       List.iter (emit_instruction chan) body;
       Format.fprintf chan ")@]@,";
@@ -152,7 +172,7 @@ let emit_top_level chan = function
 let compiler_globals chan =
   Format.fprintf chan "(global $__stack_pointer i32 (i32.const 0) )@,";
   Format.fprintf chan "(global $__data_end i32 (i32.const 0) )@,";
-  Format.fprintf chan "(global $__heap_base i32 (i32.const 0) )@,"
+  Format.fprintf chan "(global $__heap_base (mut i32) (i32.const 0) )@,"
 
 let preprocess_globals chan = function
   | Function _ as f -> Some f
@@ -160,16 +180,26 @@ let preprocess_globals chan = function
       Format.fprintf chan "@[(global $%s %s (%a))@]@," name (emit_type t)
         emit_value value;
       None
-
+(* TODO hack for now to include mallo in the code *)
+let malloc_explicit chan =
+  Format.fprintf chan "(memory (export \"memory\") 17)@,";
+  let malloc_code = open_in "malloc.wat" in 
+  let len = in_channel_length malloc_code in
+  let content = really_input_string malloc_code len in
+  Format.fprintf chan "%s" content 
+let malloc_mem_import chan = 
+  Format.fprintf chan "(func $eta_malloc (import \"env\" \"eta_malloc\") (param i32) (result i32))@,";
+  Format.fprintf chan "(memory (export \"memory\") 17)@,"
 let emit wasm_file (Program decls) =
   let out_chan = open_out wasm_file in
   let formatter = Format.formatter_of_out_channel out_chan in
   (* define module memory tables etc, and the data *)
   Format.fprintf formatter "@[<v 2>(module@,";
   (* define all globals *)
+  (* malloc_mem_import formatter; *)
   compiler_globals formatter;
+  malloc_explicit formatter;
   let funcs = List.filter_map (preprocess_globals formatter) decls in
-
   let export_strings = List.map (emit_top_level formatter) funcs in
   (* Last export all functions *)
   List.iter

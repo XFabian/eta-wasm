@@ -2,10 +2,16 @@ module W = struct
   include Wtac
 end
 
+let convert_type = function 
+| Types.Int -> W.I64 
+| Types.Bool | Types.Array _ -> W.I32
+| _ -> failwith "Internal Error: Cannot convert functoin type"
+
+
 let vars = ref []
 let reset () = vars := []
 let update_locals name t = 
-  let obj : Wtac.obj = { name; t } in
+  let obj : Wtac.obj = { name; t = convert_type t } in
   vars := obj :: !vars
 (* Now that I have vars I need a symbol table to keep track of references in assignment
    So that they are correctly called
@@ -24,7 +30,15 @@ let make_wtac_var ty =
   (* Symbols.add_var ~f_name dst_name ty; *)
   W.Var dst_name
 
-
+(* Helper to typecheck expression and unfold the type since [t] is returned
+Only function calls can return multiple values. In most cases we know
+it is only one *)
+let type_and_unfold e =
+  let e_ty = Typecheck.typecheck_expr e in
+  match e_ty with 
+  | [t] -> t 
+  | _ -> failwith "Internal Error: Type and unfold should only be called
+  when it is clear that the expression is not a function call"
 
 let mem_of_wtac_var v =
   match v with
@@ -37,11 +51,17 @@ fn lenght (:int[]) :int
 The length is stored at a[-1] space is reserved when we alloc*)
 let length_conversion () =
   let offset_dst = make_wtac_var [Types.Int] in
-  let instr_calc = W.Binary{op=Sub; src1= Var "0"; src2 = Imm 4; dst = offset_dst} in 
+  (* Bool has same size as pointer *)
+  let instr_calc = W.Binary{op=Sub; src1= Var "0"; src2 = Imm (4, W.I32); dst = offset_dst; t = W.I32} in 
   let dst = make_wtac_var [Types.Int] in
   (* actually use load here *)
-  (* It also does not encode operand size *)
-  [instr_calc; W.Load{src_ptr= offset_dst; dst}]
+  (* It also does not encode operand size
+  Copy trick looking up array type does not work 
+on int[] array we still want  *)
+(* TODO. Note that length is a 32 bit integer since the size of an array
+i at most 2^32 this then needs to be upcasted to be used in computatoins *)
+  [instr_calc; W.Copy{src= offset_dst; dst; t=W.I32}]
+
 
 let convert_unop = function
   | Ast.Neg -> W.Negate
@@ -63,9 +83,9 @@ let convert_binop = function
   | Neq -> W.Neq
 
 let rec expr_gen = function
-  | Ast.Int i -> ([], Wtac.Imm i)
-  | Bool true -> ([], Wtac.Imm 1)
-  | Bool false -> ([], Wtac.Imm 0)
+  | Ast.Int i -> ([], Wtac.Imm (i, W.I64))
+  | Bool true -> ([], Wtac.Imm (1, W.I32))
+  | Bool false -> ([], Wtac.Imm (0, W.I32))
   | Var x -> (
       match Symbols.get_opt x with
       | None -> failwith "Internal Error: Variable should be in symbol Map"
@@ -76,9 +96,9 @@ let rec expr_gen = function
       let e1_instr, v_e1 = expr_gen e1 in
       let e2_instr, v_e2 = expr_gen e2 in
       let w_op = convert_binop op in
-      let e_ty = Typecheck.typecheck_expr e1 in
-      let dst = make_wtac_var e_ty in
-      let w_bin = W.Binary { op = w_op; src1 = v_e1; src2 = v_e2; dst } in
+      let e_ty = type_and_unfold e1 in
+      let dst = make_wtac_var [e_ty] in
+      let w_bin = W.Binary { op = w_op; src1 = v_e1; src2 = v_e2; dst; t = convert_type e_ty} in
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
   | FunCall { name; args } ->
@@ -104,10 +124,11 @@ let rec expr_gen = function
         | _ -> failwith "Wrong type"
       in
       (* A lot of offset calculations... *)
-      let dst_offset = make_wtac_var [Types.Int] in
-      let offset = W.Binary{op=Mult; src1=v_e2; src2= Imm (Types.get_size elem_t); dst=dst_offset} in 
+      let dst_offset = make_wtac_var [Types.Bool] in
+      (* TODO Types may be wrong *)
+      let offset = W.Binary{op=Mult; src1=v_e2; src2= Imm (Types.get_size elem_t, W.I32); dst=dst_offset; t = W.I32} in 
       let offset_instr =
-        W.Binary { op = Add; src1 = v_e1; src2 = dst_offset; dst = fin_addr }
+        W.Binary { op = Add; src1 = v_e1; src2 = dst_offset; dst = fin_addr; t = W.I32 }
       in
       let mem_dst = mem_of_wtac_var fin_addr in
       (e2_instr @ e1_instr @ [offset; offset_instr ], mem_dst)
@@ -127,15 +148,12 @@ and gen_unary op e =
    This will be used everywhere except assignments *)
 let gen_and_convert_expr e =
   let instrs, res = expr_gen e in
-  let t =
-    match Typecheck.typecheck_expr e with
-    | [ x ] -> x
-    | _ -> failwith "Only a single type should be returned here"
+  let t = type_and_unfold e
   in
   match res with
   | Mem _ as src ->
       let dst = make_wtac_var [ t ] in
-      (instrs @ [ W.Copy { src; dst } ], dst)
+      (instrs @ [ W.Copy { src; dst ; t= convert_type t} ], dst)
   | _ -> (instrs, res)
 
 let rec stmt_gen = function
@@ -152,7 +170,7 @@ let rec stmt_gen = function
       | Some e ->
           let instrs, res = expr_gen e in
           (* Symbols.add_var ~f_name name var_type; *)
-          instrs @ [ W.Copy { src = res; dst = Var name } ])
+          instrs @ [ W.Copy { src = res; dst = Var name; t = convert_type var_type } ])
   | Ast.ArrayDecl { name; init; dims; a_type } -> (
       (* We know it typechecked
          We need to alloc when either init is there or dimensions are specified
@@ -165,7 +183,7 @@ let rec stmt_gen = function
       match init with
       | Some e ->
           let instrs, res = expr_gen e in
-          instrs @ [ W.Copy { src = res; dst = Var name } ]
+          instrs @ [ W.Copy { src = res; dst = Var name; t = convert_type a_type } ]
       | None ->
           (* Check dimension
              Needs loop to malloc inner arrays*)
@@ -173,14 +191,17 @@ let rec stmt_gen = function
             match ds with
             | Some e :: ds' -> (
                 let e_instr, e_res = expr_gen e in
-                let dst_bytes = make_wtac_var [ Types.Int ] in
+                (* Ugly Hack since bool has same size as pointer but we cant supply array here *)
+                let dst_bytes = make_wtac_var [ Types.Bool ] in
                 let offset_instr =
+                  (* TODO: Need type for multiplication *)
                   W.Binary
                     {
                       op = Mult;
                       src1 = e_res;
-                      src2 = W.Imm (Types.get_size elem_t);
+                      src2 = W.Imm (Types.get_size elem_t, W.I32);
                       dst = dst_bytes;
+                      t = W.I32
                     }
                 in
                 let ptr = W.Var name in
@@ -190,7 +211,7 @@ let rec stmt_gen = function
                       offset_instr;
                       W.FCall
                         {
-                          name = "malloc";
+                          name = "eta_malloc";
                           args = [ dst_bytes ];
                           dst = Some ptr;
                         };
@@ -207,9 +228,9 @@ let rec stmt_gen = function
                     let break_label = Unique_ids.make_label "malloc_exit" in
                     let loop_label = Unique_ids.make_label "malloc_loop" in
                     (* Manual while loop *)
-                    let dst_counter = make_wtac_var [ Types.Int ] in
+                    let dst_counter = make_wtac_var [ Types.Bool ] in
                     let copy_counter =
-                      W.Copy { src = Imm 0; dst = dst_counter }
+                      W.Copy { src = Imm (0, W.I32); dst = dst_counter;t = W.I32 }
                     in
                     let dst_guard = make_wtac_var [ Types.Bool ] in
                     let guard =
@@ -219,6 +240,7 @@ let rec stmt_gen = function
                           src1 = dst_counter;
                           src2 = e_res;
                           dst = dst_guard;
+                          t = W.I32
                         }
                     in
                     let dst_guard_not = make_wtac_var [ Types.Bool ] in
@@ -230,32 +252,35 @@ let rec stmt_gen = function
                         {
                           op = Add;
                           src1 = dst_counter;
-                          src2 = Imm 1;
+                          src2 = Imm (1, W.I32);
                           dst = dst_counter;
+                          t = W.I32
                         }
                     in
                     let loop_guard =
                       W.BrIf { cond = dst_guard_not; l = break_label }
                     in
-                    (* Need access to their pointer *)
-                    let offset = make_wtac_var [ Types.Int ] in
+                    (* Need access to their pointer 
+                    Ugly hack since bool has i32*)
+                    let offset = make_wtac_var [ Types.Bool ] in
                     let offset_instr =
                       W.Binary
                         {
                           op = Mult;
                           src1 = dst_counter;
-                          src2 = W.Imm (Types.get_size elem_t);
+                          src2 = W.Imm (Types.get_size elem_t, convert_type elem_t);
                           dst = offset;
+                          t = W.I32
                         }
                     in
                     let ptr_loc = make_wtac_var [ a_type ] in
                     let ptr_offset =
                       W.Binary
-                        { op = Add; src1 = ptr; src2 = offset; dst = ptr_loc }
+                        { op = Add; src1 = ptr; src2 = offset; dst = ptr_loc ; t = W.I32}
                     in
                     (* Todo There should be Mems in here *)
                     let mem_ptr = mem_of_wtac_var ptr_loc in
-                    let copy_mem = W.Copy { src = inner_ptr; dst = mem_ptr } in
+                    let copy_mem = W.Copy { src = inner_ptr; dst = mem_ptr; t = convert_type a_type} in
                     let loop_malloc =
                       W.Loop
                         {
@@ -277,9 +302,10 @@ let rec stmt_gen = function
                     in
                     (ptr, instr @ [ copy_counter; block_m ]))
             (* Inner stuff is not stored! *)
-            (* This is very ugly to return soe imm here but necessart*)
-            | None :: _ -> (Imm 0, [])
-            | [] -> (Imm 0, [])
+            (* This is very ugly to return soe imm here but necessary
+            Those immediates are not used*)
+            | None :: _ -> (Imm (0, W.I32), [])
+            | [] -> (Imm (0, W.I32), [])
           in
 
           let _, instr =
@@ -290,11 +316,13 @@ let rec stmt_gen = function
                 | _ -> failwith "Internal Error: Array has non array type")
             | None ->
                 (* This means no init and no dimensins to init, so we do nothing here *)
-                (Imm 0, [])
+                (Imm (0, W.I32), [])
           in
           instr)
   | Ast.Assign { lhs; rhs } ->
       let instrs_rhs, rhs_res = List.map gen_and_convert_expr rhs |> List.split in
+      let rhs_ty = List.map Typecheck.typecheck_expr rhs in
+      let lhs_ty = List.map Typecheck.typecheck_expr lhs in
       (* TODO with arrays this will be trickier This are not converted *)
       let instrs_lhs, lhs_res = List.map expr_gen lhs |> List.split in
       (* generate a copy for each pair
@@ -302,16 +330,23 @@ let rec stmt_gen = function
          right now x,y = add() which returns 2 elements
          Function can return a multi value
          Also rhs needs to be copied into temporaries and then transfered*)
-      let dst_rhs, rhs_instrs_copies =
+         let dst_rhs, rhs_instrs_copies =
         List.fold_left_map
-          (fun acc rhs ->
-            let dst = make_wtac_var [ Types.Int ] in
-            (acc @ [ dst ], W.Copy { src = rhs; dst }))
-          [] rhs_res
+          (fun acc (rhs_v, rhs_t) ->
+            (match rhs_t with 
+            | [t] -> 
+            let dst = make_wtac_var  [t] in
+            (acc @ [ dst ], W.Copy { src = rhs_v; dst; t = convert_type t })
+            | _ -> failwith "Function call assignments with multiple returns not handled right now"))
+          [] (List.combine rhs_res rhs_ty)
       in
       let copies =
-        List.combine lhs_res dst_rhs
-        |> List.map (fun (lhs, rhs) -> W.Copy { src = rhs; dst = lhs })
+        List.combine (List.combine lhs_res lhs_ty) dst_rhs
+        |> List.map (fun ((lhs, lhs_t), rhs) -> 
+          match lhs_t with 
+          | [t] -> W.Copy { src = rhs; dst = lhs; t = convert_type t }
+          | _ -> failwith "Internal Error: Lvalues should only containt one type value"
+          )
       in
       List.concat instrs_rhs @ List.concat instrs_lhs @ rhs_instrs_copies
       @ copies
@@ -376,13 +411,13 @@ let gen_top_level decl =
   | Ast.Global { name; var_type; init } ->
       let value =
         match init with
-        | Some (Ast.Int i) -> Wtac.Imm i
-        | Some (Bool true) -> Wtac.Imm 1
-        | Some (Bool false) -> Wtac.Imm 0
+        | Some (Ast.Int i) -> Wtac.Imm (i, W.I64)
+        | Some (Bool true) -> Wtac.Imm (1, W.I32)
+        | Some (Bool false) -> Wtac.Imm (0, W.I32)
         | Some _ ->
             failwith
               "Internal error. A non literal is used to initialzie a global"
-        | None -> Wtac.Imm (-1)
+        | None -> Wtac.Imm (-1, W.I32)
         (* like an undefined*)
       in
       Data { name; t = var_type; value }

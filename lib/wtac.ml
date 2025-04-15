@@ -1,6 +1,8 @@
 (* TAC IR for our language
    Has structured control flow
 *)
+
+type wtac_type = | I32 | I64 
 type unary_op = Negate | Not
 
 type binary_op =
@@ -24,11 +26,12 @@ type binary_op =
    Very ugly rioght now
 *)
 (* Maybe it should be a map from string to type *)
-type obj = { name : string; t : Types.t }
+type obj = { name : string; t : wtac_type }
 
 (* Mem should be a value as well for arrays for example
 Copy with a mem *)
-type value = Imm of int | Var of string | Mem of string
+(* We tpe immediates so we know which size to emit *)
+type value = Imm of int * wtac_type | Var of string | Mem of string
 (* Mem is used to represent the memory locatoin of something.
 So we sometimes convert to it. We use it to differentiate in Copy if
   we just assign or we do a load or store
@@ -38,8 +41,8 @@ Maybe at an offset to Mem*)
 type instruction =
   | Return of value list
   | Unary of { op : unary_op; src : value; dst : value }
-  | Binary of { op : binary_op; src1 : value; src2 : value; dst : value }
-  | Copy of { src : value; dst : value }
+  | Binary of { op : binary_op; src1 : value; src2 : value; dst : value; t: wtac_type }
+  | Copy of { src : value; dst : value; t : wtac_type }
   (* Sometimes called Move needed for assignments and declarations*)
   (* Blocks as in WASM
      a br instruction exits the innermost block.
