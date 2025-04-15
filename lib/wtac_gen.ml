@@ -172,7 +172,11 @@ let rec expr_gen = function
       let e2_instr, v_e2 = expr_gen e2 in
       let w_op = convert_binop op in
       let e_ty = type_and_unfold e1 in
-      let dst = make_wtac_var [ e_ty ] in
+      let res_type = match op with 
+      | Eq | Neq | Lt | Leq | Gt | Geq -> Types.Bool 
+      | _ -> e_ty
+      in
+      let dst = make_wtac_var [ res_type ] in
       let w_bin =
         W.Binary
           { op = w_op; src1 = v_e1; src2 = v_e2; dst; t = convert_type e_ty }
@@ -183,7 +187,13 @@ let rec expr_gen = function
       (* TODO : For type need to lookup function call.
          However, if it returns multiple ones then the return type is wrong
            and we need to do additional work *)
-      let dst = make_wtac_var [ Types.Int ] in
+         (* Only match with single return *)
+        let ret_type = match (Symbols.get name).t with
+        | Types.FunType{ret_type=[r]; _} -> r
+        | _ -> failwith "Internal Error: Function call should have a function type"
+        in
+
+        let dst = make_wtac_var [ ret_type ] in
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
       ( List.flatten arg_instrs
         @ [ W.FCall { name; args = arg_vals; dst = Some dst } ],
