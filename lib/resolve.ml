@@ -195,8 +195,12 @@ let resolve_top_level state = function
 
 let resolve (Ast.Program decls) =
   let init_state = StackMap.new_map () in
+  (* Add length function *)
+  let open StackMap in 
+  let en = {unique_name="length"; global = true} in
+  let ini_state = StackMap.add "length" en init_state in
   let fin_state, resolved_decls =
-    List.fold_left_map resolve_top_level init_state decls
+    List.fold_left_map resolve_top_level ini_state decls
   in
   (fin_state, Ast.Program resolved_decls)
 

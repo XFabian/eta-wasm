@@ -54,13 +54,15 @@ let mem_of_wtac_var v =
    fn lenght (:int[]) :int
    The length is stored at a[-1] space is reserved when we alloc*)
 let length_conversion () =
-  let offset_dst = make_wtac_var [ Types.Int ] in
+  let offset_dst = make_wtac_var [ Types.Array{elem_type=Types.Int} ] in
   (* Bool has same size as pointer *)
+  let p_name =Unique_ids.make_temp () in
+  Symbols.add_local_var p_name Types.Bool;
   let instr_calc =
     W.Binary
       {
         op = Sub;
-        src1 = Var "0";
+        src1 = Var p_name;
         src2 = Imm (4, W.I32);
         dst = offset_dst;
         t = W.I32;
@@ -73,7 +75,14 @@ let length_conversion () =
      on int[] array we still want *)
   (* TODO. Note that length is a 32 bit integer since the size of an array
      i at most 2^32 this then needs to be upcasted to be used in computatoins *)
-  [ instr_calc; W.Copy { src = offset_dst; dst; t = W.I32 } ]
+  let instrs =[ instr_calc; W.Copy { src = mem_of_wtac_var offset_dst; dst; t = W.I64 }; W.Return [dst]] in 
+  (* This type is hacky, we would like t use wtac types *)
+  
+  let f_type = Types.FunType{param_types=[Types.Bool]; ret_type=[Types.Int]}in
+  let fun_le = Wtac.Function { name= "length"; body = instrs; params=[p_name]; f_type; locals = !vars }
+  in
+  reset();
+  fun_le
 
 (* Helper to compute offset
    [arr_size] size of the array as a dst of a computation
@@ -516,5 +525,6 @@ let gen_top_level decl =
       Data { name; t = var_type; value }
 
 let gen (Ast.Program decls) : Wtac.program =
+  let length_fun = length_conversion () in
   let wtac_decls = List.map gen_top_level decls in
-  Wtac.Program wtac_decls
+  Wtac.Program (length_fun::wtac_decls)

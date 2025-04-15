@@ -109,12 +109,23 @@ and fun_helper name args =
       failwith "Some arguments do not have the correct type"
     else ret_t
 
+  (* Special case for length function
+  It just needs an array but we are not polymorphic! *)
+and handle_length args = 
+  if List.length args <> 1 then failwith "Length Function takes one argument"
+  else 
+  let e_ty = typecheck_expr (List.hd args) in
+  if not (Types.is_arr (List.hd e_ty)) then failwith "Length function requires an array"
+  else [Types.Int]
 and typecheck_fun_call name args =
-  let ret_t = fun_helper name args in
+  match name with 
+  | "length" -> handle_length args
+  | _ ->
+  (let ret_t = fun_helper name args in
   (* Return has to have some value otherwise it would be a procedure *)
   match ret_t with
   | [] -> failwith "Function call needs a non-empty return type!"
-  | ts -> ts
+  | ts -> ts)
 
 let typecheck_arr_decl name t dims init =
   (* Check out dimensions Convert dims with value to true empty ones to false
@@ -152,7 +163,13 @@ let typecheck_arr_decl name t dims init =
         failwith "Cannot specify dimensions and initialize array. Not allowed"
       else
         let e_t = typecheck_expr e in
-        if [ t ] <> e_t then failwith "Initializer has wrong type for the array"
+
+        (match e_t with 
+        | [Types.Unknown] -> ()
+        | [ et ] when [et] = [t] -> ()
+        | _ -> failwith "Initializer has wrong type for the array"
+   )
+        (* if [ t ] <> e_t then failwith "Initializer has wrong type for the array" *)
   | None -> ());
   Symbols.add_local_var name t
 
@@ -247,4 +264,8 @@ let typecheck_top_level = function
       in
       Symbols.add_global_var name var_type
 
-let typecheck (Ast.Program decls) = List.iter typecheck_top_level decls
+let typecheck (Ast.Program decls) = 
+  (* Add length function to symbols for typechecking *)
+  let length_f_type = Types.FunType{param_types=[Types.Unknown]; ret_type=[Types.Int]} in 
+  Symbols.add_fun "length" length_f_type false;
+  List.iter typecheck_top_level decls
