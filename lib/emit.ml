@@ -20,6 +20,8 @@ let emit_bin_op t out op =
   | Add -> "add"
   | Sub -> "sub"
   | Mult -> "mul"
+  | Div -> "div_s"
+  | Mod -> "rem_s"
   | And -> "and"
   | Or -> "or"
   | Lt -> "lt_s"
@@ -27,7 +29,7 @@ let emit_bin_op t out op =
   | Gt -> "gt_s" 
   | Geq -> "ge_s"
   | Eq -> "eq"
-  | _ -> failwith "Equal and not equal Not impemented"
+  | Neq -> "ne"
   in 
   Format.fprintf out "%s.%s" (emit_wtype t) op_t
 
