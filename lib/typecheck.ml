@@ -264,8 +264,15 @@ let typecheck_top_level = function
       in
       Symbols.add_global_var name var_type
 
+(* For mutual recursion we add functions here already  *)
+let add_top_level = function 
+| Ast.FunDecl fn -> 
+  Symbols.add_fun fn.name fn.f_type false;
+| _ -> ()
+  
 let typecheck (Ast.Program decls) = 
   (* Add length function to symbols for typechecking *)
+  let _ = List.map add_top_level decls in
   let length_f_type = Types.FunType{param_types=[Types.Unknown]; ret_type=[Types.Int]} in 
   Symbols.add_fun "length" length_f_type false;
   List.iter typecheck_top_level decls

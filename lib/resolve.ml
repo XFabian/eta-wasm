@@ -166,14 +166,8 @@ let resolve_params state params =
   List.fold_left_map fold_params state params
 
 let resolve_function state { name; params; f_type; body } =
-  match StackMap.find_opt_curr name state with
-  | Some _entry -> failwith (Printf.sprintf "Function %s already defined" name)
-  | None ->
-      let open StackMap in
-      let n_state =
-        StackMap.add name { unique_name = name; global = true } state
-      in
-      let new_scope = StackMap.push n_state in
+
+      let new_scope = StackMap.push state in
       let inner_scope, res_params = resolve_params new_scope params in
       let fin_state, new_body = resolve_block inner_scope body in
       ( StackMap.pop fin_state,
@@ -193,14 +187,25 @@ let resolve_top_level state = function
           let fin_state = StackMap.add v_decl.name entry state in
           (fin_state, Global v_decl))
 
+let resolve_only_top_level state = function 
+  | Ast.FunDecl fn ->
+    let open StackMap in 
+    let en = {unique_name= fn.name; global = true} in
+    let new_state = StackMap.add fn.name en state in
+    new_state
+  | Global _ -> 
+    (* Globals need to be declared first so do nothing here *)
+    state
+
 let resolve (Ast.Program decls) =
   let init_state = StackMap.new_map () in
   (* Add length function *)
   let open StackMap in 
   let en = {unique_name="length"; global = true} in
   let ini_state = StackMap.add "length" en init_state in
+  let new_state = List.fold_left resolve_only_top_level ini_state decls in
   let fin_state, resolved_decls =
-    List.fold_left_map resolve_top_level ini_state decls
+    List.fold_left_map resolve_top_level new_state decls
   in
   (fin_state, Ast.Program resolved_decls)
 
