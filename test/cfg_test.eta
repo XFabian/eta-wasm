@@ -1,0 +1,36 @@
+function() {
+    a :int = 3
+    b : int = 4
+    if a < b {
+        c : int = 5
+        a = c
+    }
+    else {
+        c : int = 4
+        a = c
+    }
+
+    while a < b {
+        a = a + 1
+    }
+
+    return 
+}
+
+function2() {
+
+    if 1 < 2 {
+        while true {
+            a:int =1
+        }
+    }
+    else {
+        if false 
+        {while 1 < 2 {
+            a: int  = 5
+        }
+        
+        }
+    }
+    return
+}

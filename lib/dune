@@ -1,3 +1,5 @@
+(include_subdirs unqualified)
+
 (library
  (name wetac)
  (preprocess
@@ -8,6 +10,7 @@
   lexer
   parser
   unique_ids
+  cfg
   ; sexp_printer
   symbols
   types

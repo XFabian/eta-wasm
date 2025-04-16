@@ -3,7 +3,9 @@
 *)
 
 type wtac_type = | I32 | I64 
+[@@deriving show]
 type unary_op = Negate | Not
+[@@deriving show]
 
 type binary_op =
   | Add
@@ -19,6 +21,7 @@ type binary_op =
   | Geq
   | Eq
   | Neq
+  [@@deriving show]
 
 (* Maybe record that information somewhere. So during one function we can record all
    created variable
@@ -27,11 +30,14 @@ type binary_op =
 *)
 (* Maybe it should be a map from string to type *)
 type obj = { name : string; t : wtac_type }
+[@@deriving show]
 
 (* Mem should be a value as well for arrays for example
 Copy with a mem *)
 (* We tpe immediates so we know which size to emit *)
 type value = Imm of int * wtac_type | Var of string | Mem of string
+[@@deriving show]
+
 (* Mem is used to represent the memory locatoin of something.
 So we sometimes convert to it. We use it to differentiate in Copy if
   we just assign or we do a load or store
@@ -56,6 +62,7 @@ type instruction =
   | Loop of {label : string; body : instruction list}
   | Br of string
   | BrIf of { cond : value; l : string }
+  [@@deriving show]
 
 (* DATA is used for globals *)
 type top_level =
@@ -69,5 +76,7 @@ type top_level =
     (* After semantic nalysis we know that init has to be a literal const!
        Arrays are not initialzed in global *)
   | Data of { name : string; t : Types.t; value : value }
+  [@@deriving show]
 
 type program = Program of top_level list
+[@@deriving show]

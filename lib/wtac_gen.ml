@@ -63,7 +63,7 @@ let length_conversion () =
       {
         op = Sub;
         src1 = Var p_name;
-        src2 = Imm (4, W.I32);
+        src2 = Imm (8, W.I32);
         dst = offset_dst;
         t = W.I32;
       }
@@ -464,8 +464,8 @@ let rec stmt_gen = function
       @ copies
   | Ast.Compound (Block bl) -> List.concat_map stmt_gen bl
   | If { guard; then_br; else_br } ->
-      let else_label = Unique_ids.make_label "if_else" in
-      let end_label = Unique_ids.make_label "if_end" in
+      let else_label, end_label = Unique_ids.make_label_pair "if_else" "if_end" in
+      (* let end_label = Unique_ids.make_label "if_end" in *)
       (* let instrs = control_flow_gen guard t_label else_label in  *)
       let instrs, dst = expr_gen guard in
       let then_instrs = stmt_gen then_br in
@@ -483,12 +483,12 @@ let rec stmt_gen = function
               @ W.[ Br end_label ]);
           }
       in
-      [ W.Block { label = end_label; body = [ else_block ] @ then_instrs } ]
+      [ W.Block { label = end_label; body = [ else_block ] @ then_instrs @ W.[ Br end_label ] } ]
   | Ast.While { guard; body } ->
       let instrs, dst = expr_gen guard in
       let body_instrs = stmt_gen body in
-      let block_label = Unique_ids.make_label "while_end" in
-      let loop_label = Unique_ids.make_label "while_loop" in
+      let block_label, loop_label = Unique_ids.make_label_pair "while_end" "while_loop" in
+      (* let loop_label = Unique_ids.make_label "while_loop" in *)
       (* Negate condition *)
       let neg_dst = make_wtac_var [ Types.Bool ] in
       let neg_op = W.Unary { op = Not; src = dst; dst = neg_dst } in

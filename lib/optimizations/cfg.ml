@@ -1,0 +1,291 @@
+(* CFG for WTAC
+   Has an explicit entry and exit nodes. Those nodes are empty
+   Entry has one Successor and exit has none
+*)
+open Wtac
+
+let id_counter = ref 0
+
+let make_id () =
+  let id = !id_counter in
+  id_counter := id + 1;
+  id
+
+(* Inavriant Terminator is one of the branching istructions or an empty loop block *)
+type basic_block = {
+  id : int;
+  (* label : string; *)
+  instructions : Wtac.instruction list;
+  (* terminator : Wtac.instruction; *)
+  mutable preds : int list;
+  mutable succs : int list;
+}
+
+let new_empty_block instr =
+  let id = make_id () in
+  { id; instructions = instr; preds = []; succs = [] }
+
+let is_terminator = function
+  | Wtac.Br _
+  | Wtac.BrIf _
+  | Wtac.Loop _
+  | Wtac.Return _ ->
+      true
+  | _ -> false
+
+(* Accumulate instructions until you find a terminator *)
+(* Returns a basic block and the rest of instructions *)
+let rec create_basic_block acc instrs : basic_block * instruction list =
+  match instrs with
+  | [] ->
+      (* Finished we create exit block
+         Cheated a little we need to add a terminator bu this needs be ignored*)
+      (new_empty_block [], [])
+  | i :: is when is_terminator i -> (new_empty_block (acc @ [ i ]), is)
+  | i :: is -> create_basic_block (acc @ [ i ]) is
+
+(* Records the targets of jumps *)
+let resolver_map : (string, int) Hashtbl.t = Hashtbl.create 10
+
+(* When I go int o a block I need to look into these instructions *)
+let rec split_into_basic_blocks l_stack instrs =
+  let split_instr (acc, blocks) (instr : instruction) =
+    match instr with
+    (* Blocks and loops have nested instructions *)
+    | Block { body; label } ->
+        (* add current instructions to body Body does not create a new basic block *)
+        (* Reaminign is here for nestd blocks that have something
+           after them like an if *)
+        let rem_instr, body_blocks =
+          split_into_basic_blocks l_stack (acc @ body)
+        in
+        let new_blocks = blocks @ body_blocks in
+        List.iter
+          (fun i -> Printf.printf "%s" (Wtac.show_instruction i))
+          rem_instr;
+        (* if List.length body_blocks <> 3 then failwith "Body blocks strange"
+           else *)
+        (* It does not parse the remaining parts of the then branch
+           of the block *)
+        (* The for the follwoing block is just the block id after this block
+           But after else block comes the then block*)
+        (* Suuuuuuuuuuuuuper ugly hack checks if label is an if_else if_end does not have l
+             and could not find method to check for substring
+           If it is if_end we need to jump further *)
+          if String.starts_with ~prefix:label "if_en" then
+          Hashtbl.replace resolver_map label (!id_counter + 1)
+        else Hashtbl.replace resolver_map label !id_counter;
+        (rem_instr, new_blocks)
+    | Loop { body; label } ->
+        let block = new_empty_block (acc @ [ Loop { label; body = [] } ]) in
+        let new_blocks = blocks @ [ block ] in
+        let rem_instr, loop_blocks = split_into_basic_blocks l_stack body in
+        (* A loop should not have remainging instructios *)
+        if List.length rem_instr <> 0 then
+          failwith "Failed Loop Construction: Did not handle all isntructions"
+        else
+          (* The loop header is the target here the forward edge is handled by the block
+             The loop header*)
+          Hashtbl.replace resolver_map label (block.id + 1);
+        ([], new_blocks @ loop_blocks)
+    | i when is_terminator i ->
+        let block = new_empty_block (acc @ [ i ]) in
+        let new_blocks = blocks @ [ block ] in
+        let new_acc = [] in
+        (new_acc, new_blocks)
+    | _ -> (acc @ [ instr ], blocks)
+  in
+  let rem_instr, instr_blocks = List.fold_left split_instr ([], []) instrs in
+  (* List.iter (fun i -> Printf.printf "%s" (show_instruction i)) rem_instr; *)
+  (rem_instr, instr_blocks)
+
+(* CFG for a function *)
+type cfg = {
+  (* store basic blocks in association list, indexed by block # *)
+  blocks : (int * basic_block) list;
+  (* Function name for example *)
+  label : string;
+}
+
+(* Emoty entry block *)
+let make_entry () = new_empty_block []
+let make_exit () = new_empty_block []
+(* int is the basic block they target *)
+
+type stack_label = BlockLabel of int | LoopLabel of int
+(* let rec process_instrs label_stack acc parent instrs =
+   match instrs with
+   | [] -> (* Finished we create exit block
+           Cheated a little we need to add a terminator bu this needs be ignored*)
+         new_empty_block [], []
+   | Loop {label; body}:: is ->
+     let new_block = new_empty_block (acc @ [Loop{label; body=[]}]) in
+     Stack.push (LoopLabel new_block.id) label_stack;
+     let loop_blocks = split_into_basic_blocks body in
+
+     process_instrs label_stack [] new_block.id body
+     Stack.pop label_stack;
+   | i::is when is_terminator i ->
+     new_empty_block (acc @[i]), is
+   | i::is -> process_instrs label_stack (acc @ [i]) parent is *)
+
+(* Coming from --> to and the backward edge as well *)
+let add_edge from to_ =
+  from.succs <- to_.id :: from.succs;
+  to_.preds <- from.id :: to_.preds
+
+(* Very ugly hack
+   We need to add the binding for exit here so if there is no return
+     we automatically add it there
+   However, return has no instructions so List.hd would fail
+   Thus, we remove it in the actual fold call *)
+let add_edges blocks =
+  let edge_helper (_, b) =
+    let last = List.hd (List.rev b.instructions) in
+    match last with
+    | Br l ->
+        let to_id = Hashtbl.find resolver_map l in
+        let to_block = List.assoc to_id blocks in
+        add_edge b to_block
+    | BrIf { l; _ } ->
+        (* Need to add two edges here one to the end and one to the direct successor *)
+        let to_id = Hashtbl.find resolver_map l in
+        let to_block = List.assoc to_id blocks in
+        add_edge b to_block;
+        let next_bl = List.assoc (b.id + 1) blocks in
+        add_edge b next_bl
+    | Loop _ ->
+        (* Kept loop here for better reconstruction *)
+        let next_bl = List.assoc (b.id + 1) blocks in
+        add_edge b next_bl
+    | _ -> ()
+  in
+  (* Remove exit block from list very ugly hack
+     relies on the counter *)
+  let blocks_no_exit = List.remove_assoc (!id_counter - 1) blocks in
+  List.iter edge_helper blocks_no_exit
+
+let cfg_helper = function
+  | Wtac.Function fn ->
+      let label_stack = Stack.create () in
+      let entry = make_entry () in
+      let rem_instr, blocks = split_into_basic_blocks label_stack fn.body in
+      if List.length rem_instr <> 0 then
+        failwith "Failed Cfg Construction: Did not handle all isntructions"
+      else
+        let exit = make_exit () in
+        let chan = Format.formatter_of_out_channel stdout in
+        (* let print_helper ls_i =
+             List.iter (fun i -> Format.fprintf chan "%a\n" Wtac_print.pp_instruction i) ls_i
+           in *)
+        (* List.iteri (fun i ls -> Format.fprintf chan "Basic block %d:@," i ; print_helper ls) blocks.instructions; *)
+        let print_symbols ls =
+          List.iter (fun (k, v) -> Printf.fprintf stdout "%s: %d\n" k v) ls
+        in
+        print_symbols (Hashtbl.to_seq resolver_map |> List.of_seq);
+        (* Now need to add successor edges to the graph *)
+        Format.pp_print_flush chan ();
+        (* TODO should clear resolver map after each function *)
+        let all_blocks = (entry :: blocks) @ [ exit ] in
+        print_endline "Computing edges";
+        (* Entry edge since blocks can be empty link to exit *)
+        add_edge entry (List.hd (blocks @ [ exit ]));
+        add_edge (List.hd (List.rev (entry :: blocks))) exit;
+        let cfg_blocks =
+          List.fold_left (fun acc b -> (b.id, b) :: acc) [] (blocks @ [ exit ])
+        in
+        add_edges cfg_blocks;
+        (* Dumb but works for now. Compute list again now with entry and exit *)
+        let all_cfg_blocks =
+          List.fold_left (fun acc b -> (b.id, b) :: acc) [] all_blocks
+        in
+        id_counter := 0;
+
+        { blocks = all_cfg_blocks; label = fn.name }
+  | Data _ ->
+      (* Globals are ignored for now*)
+      failwith "Internal Error: Data not possible after filter"
+
+let make_cfg (Wtac.Program decls) =
+  List.filter
+    (fun x ->
+      match x with
+      | Function _ -> true
+      | _ -> false)
+    decls
+  |> List.map cfg_helper
+
+let compute_dominator = ()
+let compute_dominator_tree = ()
+
+(* Probably related to strongly connected componetns *)
+let compute_natural_loops = ()
+
+let pp_basic_block fmt (block : basic_block) =
+  let open Format in
+  fprintf fmt "\"Block %d\" [label=\"%d:\\l" block.id block.id;
+  List.iter
+    (fun instr ->
+      fprintf fmt "  ";
+      Wtac_print.pp_instruction fmt instr;
+      fprintf fmt "\\l")
+    block.instructions;
+  fprintf fmt "\"];\n";
+  List.iter
+    (fun succ -> fprintf fmt "\"Block %d\" -> \"Block %d\";\n" block.id succ)
+    block.succs
+
+let pp_cfg fmt (blocks : (int * basic_block) list) =
+  let open Format in
+  fprintf fmt "digraph CFG {\n";
+  fprintf fmt "  node [shape=box fontname=\"monospace\"];\n";
+  List.iter (fun (_id, block) -> pp_basic_block fmt block) blocks;
+  fprintf fmt "}\n"
+
+let print_cfg f_name cfg =
+  let oc = open_out f_name in
+  let fmt = Format.formatter_of_out_channel oc in
+  pp_cfg fmt cfg.blocks;
+  close_out oc
+
+let cfg_to_dot cfg =
+  let buffer = Buffer.create 1024 in
+  Buffer.add_string buffer "digraph cfg {\n";
+  Buffer.add_string buffer
+    (Printf.sprintf
+       "subgraph \"test \" {]n style=\"dashed\";\n\n\
+       \  color=\"black\";\n\n\
+       \  label=\"Not working\";\n\n\
+       \  fn_0_basic_block_0 \
+        [shape=Mdiamond,style=filled,fillcolor=white,label=\"ENTRY\"];\n\n\n\n\
+        \tfn_0_basic_block_1 \
+        [shape=Mdiamond,style=filled,fillcolor=white,label=\"EXIT\"];\n\
+       \  ");
+  List.iter
+    (fun (id, block) ->
+      let label =
+        match block.instructions with
+        | [] -> Printf.sprintf "Block %d" id
+        | x :: xs ->
+            Printf.sprintf "Block %d: \n %s" id
+              (show_instruction (List.hd (List.rev (x :: xs))))
+      in
+      Buffer.add_string buffer
+        (Printf.sprintf "%d [shape=record,label=\"%s \"];\n" id label))
+    cfg.blocks;
+  (* All edges *)
+  (* List.iter
+     (fun edge ->
+       Buffer.add_string buffer (Printf.sprintf "%d -> %d " edge.src edge.dst);
+       (match edge.label with
+       | None -> ()
+       | Some n -> Buffer.add_string buffer (Printf.sprintf " [label=\"%s\"]" n));
+       Buffer.add_string buffer "\n")
+     cfg.edges; *)
+  Buffer.add_string buffer "}\n";
+  Buffer.contents buffer
+
+let write_dot_file filename contents =
+  let oc = open_out filename in
+  output_string oc contents;
+  close_out oc
