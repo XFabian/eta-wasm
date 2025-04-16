@@ -2,11 +2,15 @@ let is_arr = function
   | [ Types.Array _ ] -> true
   | _ -> false
 
-let is_lval = function
+let is_lval_expr = function
   | Ast.Var _
   | Subscript _ ->
       true
   | _ -> false
+
+let is_lval = function
+  | Ast.E e -> is_lval_expr e
+  | V _ -> true
 
 let rec dim_check es1 es2 =
   let helper e1 e2 =
@@ -22,6 +26,7 @@ let rec dim_check es1 es2 =
 
 let rec typecheck_expr e : Types.t list =
   match e with
+  | Ast.Var "_" -> [Types.Unknown]
   | Ast.Var x -> [ (Symbols.get x).t ]
   | Ast.Int _ -> [ Types.Int ]
   | Ast.Bool _ -> [ Types.Bool ]
@@ -63,14 +68,14 @@ let rec typecheck_expr e : Types.t list =
       | Mult
       | Div
       | Mod
-      when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
-        e1_ty
+        when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
+          e1_ty
       | Lt
       | Leq
       | Gt
       | Geq
-      when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
-        [Types.Bool]
+        when e1_ty = [ Types.Int ] && e2_ty = [ Types.Int ] ->
+          [ Types.Bool ]
       | And
       | Or
         when e1_ty = [ Types.Bool ] && e2_ty = [ Types.Bool ] ->
@@ -78,7 +83,7 @@ let rec typecheck_expr e : Types.t list =
       | Eq
       | Neq
         when e1_ty = e2_ty ->
-          [Types.Bool]
+          [ Types.Bool ]
       | _ -> failwith "Tried to apply Binary op to wrong types!")
   | Ast.FunCall { name; args } -> typecheck_fun_call name args
   | Ast.Subscript (e1, e2) -> (
@@ -109,23 +114,25 @@ and fun_helper name args =
       failwith "Some arguments do not have the correct type"
     else ret_t
 
-  (* Special case for length function
-  It just needs an array but we are not polymorphic! *)
-and handle_length args = 
+(* Special case for length function
+   It just needs an array but we are not polymorphic! *)
+and handle_length args =
   if List.length args <> 1 then failwith "Length Function takes one argument"
-  else 
-  let e_ty = typecheck_expr (List.hd args) in
-  if not (Types.is_arr (List.hd e_ty)) then failwith "Length function requires an array"
-  else [Types.Int]
+  else
+    let e_ty = typecheck_expr (List.hd args) in
+    if not (Types.is_arr (List.hd e_ty)) then
+      failwith "Length function requires an array"
+    else [ Types.Int ]
+
 and typecheck_fun_call name args =
-  match name with 
+  match name with
   | "length" -> handle_length args
-  | _ ->
-  (let ret_t = fun_helper name args in
-  (* Return has to have some value otherwise it would be a procedure *)
-  match ret_t with
-  | [] -> failwith "Function call needs a non-empty return type!"
-  | ts -> ts)
+  | _ -> (
+      let ret_t = fun_helper name args in
+      (* Return has to have some value otherwise it would be a procedure *)
+      match ret_t with
+      | [] -> failwith "Function call needs a non-empty return type!"
+      | ts -> ts)
 
 let typecheck_arr_decl name t dims init =
   (* Check out dimensions Convert dims with value to true empty ones to false
@@ -158,20 +165,26 @@ let typecheck_arr_decl name t dims init =
   (* If one dim is specified we cannot have an initialzier *)
   let dim_spec = List.exists Fun.id dims_b in
   (match init with
-  | Some e ->
+  | Some e -> (
       if dim_spec then
         failwith "Cannot specify dimensions and initialize array. Not allowed"
       else
         let e_t = typecheck_expr e in
 
-        (match e_t with 
-        | [Types.Unknown] -> ()
-        | [ et ] when [et] = [t] -> ()
+        match e_t with
+        | [ Types.Unknown ] -> ()
+        | [ et ] when [ et ] = [ t ] -> ()
         | _ -> failwith "Initializer has wrong type for the array"
-   )
         (* if [ t ] <> e_t then failwith "Initializer has wrong type for the array" *)
+      )
   | None -> ());
   Symbols.add_local_var name t
+
+let typecheck_assign_target = function
+  | Ast.E e -> typecheck_expr e
+  | V vdecl ->
+      Symbols.add_local_var vdecl.name vdecl.var_type;
+      [ vdecl.var_type ]
 
 let rec typecheck_stmt ret_type = function
   | Ast.Return es ->
@@ -199,11 +212,18 @@ let rec typecheck_stmt ret_type = function
            this is really the amount of expressions that will be assigned to lhs *)
         let rhs_t = List.concat_map typecheck_expr rhs in
         (* List.iter (fun a -> print_endline (Types.show a)) rhs_t; *)
-        let lhs_t = List.concat_map typecheck_expr lhs in
+        let lhs_t = List.concat_map typecheck_assign_target lhs in
         if List.length lhs_t <> List.length rhs_t then
           failwith "Amount of lvalues and rhs values mismatch!"
+        else
           (* TODO defined a helper that returns the values of where the mismatch happened *)
-        else if not (List.equal ( = ) lhs_t rhs_t) then
+          let eq_mod_unknown t1 t2 = 
+            match t1, t2 with 
+            | Types.Unknown, _ -> true 
+            | _, Types.Unknown -> true 
+            | t1', t2' -> t1' = t2'
+          in
+        if not (List.equal eq_mod_unknown lhs_t rhs_t) then
           failwith "Types of LHS and RHS are mismatched"
   | Ast.Compound (Block bl) -> List.iter (typecheck_stmt ret_type) bl
   | Ast.If { guard; then_br; else_br } ->
@@ -214,7 +234,8 @@ let rec typecheck_stmt ret_type = function
       ()
   | Ast.While { guard; body } ->
       let e_t = typecheck_expr guard in
-      if e_t <> [Types.Bool] then failwith "Guard of While has to have type Bool"
+      if e_t <> [ Types.Bool ] then
+        failwith "Guard of While has to have type Bool"
       else typecheck_stmt ret_type body;
       ()
   | Ast.Procedure { name; args } -> (
@@ -265,14 +286,15 @@ let typecheck_top_level = function
       Symbols.add_global_var name var_type
 
 (* For mutual recursion we add functions here already  *)
-let add_top_level = function 
-| Ast.FunDecl fn -> 
-  Symbols.add_fun fn.name fn.f_type false;
-| _ -> ()
-  
-let typecheck (Ast.Program decls) = 
+let add_top_level = function
+  | Ast.FunDecl fn -> Symbols.add_fun fn.name fn.f_type false
+  | _ -> ()
+
+let typecheck (Ast.Program decls) =
   (* Add length function to symbols for typechecking *)
   let _ = List.map add_top_level decls in
-  let length_f_type = Types.FunType{param_types=[Types.Unknown]; ret_type=[Types.Int]} in 
+  let length_f_type =
+    Types.FunType { param_types = [ Types.Unknown ]; ret_type = [ Types.Int ] }
+  in
   Symbols.add_fun "length" length_f_type false;
   List.iter typecheck_top_level decls

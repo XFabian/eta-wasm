@@ -9,8 +9,8 @@
 open Ast
 
 (* State could contain current functoin as well
-So we could start at 0 for each function and rename parameters according to the function they are in
-Since functoin names need to be unique *)
+   So we could start at 0 for each function and rename parameters according to the function they are in
+   Since functoin names need to be unique *)
 module StackMap = struct
   module StringMap = Map.Make (String)
 
@@ -82,6 +82,7 @@ let resolve_local_var_decl_helper state name =
 
 (* Unique names is for shadowing in nested blocks *)
 let rec resolve_expr state = function
+  | Ast.Var "_" -> Var "_"
   | Ast.Var x -> (
       match StackMap.find_opt x state with
       | Some entry -> Var entry.unique_name
@@ -111,6 +112,14 @@ let resolve_local_var_decl state (vdecl : var_declaration) =
   let init_res = Option.map (resolve_expr new_state) vdecl.init in
   (new_state, { vdecl with name = unique_name; init = init_res })
 
+let resolve_assign_target state = function
+  | Ast.E e ->
+      let res_e = resolve_expr state e in
+      (state, E res_e)
+  | Ast.V v_decl ->
+      let new_state, res_cdecl = resolve_local_var_decl state v_decl in
+      (new_state, V res_cdecl)
+
 (* TODO: I probably do not need to return the state here *)
 let rec resolve_stmt state = function
   | Ast.Return e ->
@@ -130,8 +139,8 @@ let rec resolve_stmt state = function
           { decl with name = unique_name; dims = dims_res; init = init_res } )
   | Assign { lhs; rhs } ->
       let res_rhs = List.map (resolve_expr state) rhs in
-      let res_lhs = List.map (resolve_expr state) lhs in
-      (state, Assign { lhs = res_lhs; rhs = res_rhs })
+      let fin_state, res_lhs = List.fold_left_map resolve_assign_target state  lhs in
+      (fin_state, Assign { lhs = res_lhs; rhs = res_rhs })
   | Compound bl ->
       let new_state = StackMap.push state in
       let fin_state, res_bl = resolve_block new_state bl in
@@ -166,12 +175,11 @@ let resolve_params state params =
   List.fold_left_map fold_params state params
 
 let resolve_function state { name; params; f_type; body } =
-
-      let new_scope = StackMap.push state in
-      let inner_scope, res_params = resolve_params new_scope params in
-      let fin_state, new_body = resolve_block inner_scope body in
-      ( StackMap.pop fin_state,
-        { name; params = res_params; f_type; body = new_body } )
+  let new_scope = StackMap.push state in
+  let inner_scope, res_params = resolve_params new_scope params in
+  let fin_state, new_body = resolve_block inner_scope body in
+  ( StackMap.pop fin_state,
+    { name; params = res_params; f_type; body = new_body } )
 
 let resolve_top_level state = function
   | Ast.FunDecl fn ->
@@ -187,21 +195,21 @@ let resolve_top_level state = function
           let fin_state = StackMap.add v_decl.name entry state in
           (fin_state, Global v_decl))
 
-let resolve_only_top_level state = function 
+let resolve_only_top_level state = function
   | Ast.FunDecl fn ->
-    let open StackMap in 
-    let en = {unique_name= fn.name; global = true} in
-    let new_state = StackMap.add fn.name en state in
-    new_state
-  | Global _ -> 
-    (* Globals need to be declared first so do nothing here *)
-    state
+      let open StackMap in
+      let en = { unique_name = fn.name; global = true } in
+      let new_state = StackMap.add fn.name en state in
+      new_state
+  | Global _ ->
+      (* Globals need to be declared first so do nothing here *)
+      state
 
 let resolve (Ast.Program decls) =
   let init_state = StackMap.new_map () in
   (* Add length function *)
-  let open StackMap in 
-  let en = {unique_name="length"; global = true} in
+  let open StackMap in
+  let en = { unique_name = "length"; global = true } in
   let ini_state = StackMap.add "length" en init_state in
   let new_state = List.fold_left resolve_only_top_level ini_state decls in
   let fin_state, resolved_decls =

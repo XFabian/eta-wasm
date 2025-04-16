@@ -38,6 +38,11 @@ which I need
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
 [@@deriving show, sexp]
 
+type assign_target = 
+| V of var_declaration
+| E of expr
+[@@deriving show, sexp]
+
 type stmt =
   | LocalDecl of var_declaration
   (* We need to keep track of the dimension like c : int[2][] will have Some 2: None *)
@@ -48,7 +53,7 @@ type stmt =
       init : expr option;
     }
   | Return of expr list
-  | Assign of { lhs : expr list; rhs : expr list }
+  | Assign of { lhs : assign_target list; rhs : expr list }
   | Compound of block
   | If of { guard : expr; then_br : stmt; else_br : stmt option }
   | While of { guard : expr; body : stmt }

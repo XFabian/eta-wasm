@@ -54,9 +54,9 @@ let mem_of_wtac_var v =
    fn lenght (:int[]) :int
    The length is stored at a[-1] space is reserved when we alloc*)
 let length_conversion () =
-  let offset_dst = make_wtac_var [ Types.Array{elem_type=Types.Int} ] in
+  let offset_dst = make_wtac_var [ Types.Array { elem_type = Types.Int } ] in
   (* Bool has same size as pointer *)
-  let p_name =Unique_ids.make_temp () in
+  let p_name = Unique_ids.make_temp () in
   Symbols.add_local_var p_name Types.Bool;
   let instr_calc =
     W.Binary
@@ -75,13 +75,29 @@ let length_conversion () =
      on int[] array we still want *)
   (* TODO. Note that length is a 32 bit integer since the size of an array
      i at most 2^32 this then needs to be upcasted to be used in computatoins *)
-  let instrs =[ instr_calc; W.Copy { src = mem_of_wtac_var offset_dst; dst; t = W.I64 }; W.Return [dst]] in 
-  (* This type is hacky, we would like t use wtac types *)
-  
-  let f_type = Types.FunType{param_types=[Types.Bool]; ret_type=[Types.Int]}in
-  let fun_le = Wtac.Function { name= "length"; body = instrs; params=[p_name]; f_type; locals = !vars }
+  let instrs =
+    [
+      instr_calc;
+      W.Copy { src = mem_of_wtac_var offset_dst; dst; t = W.I64 };
+      W.Return [ dst ];
+    ]
   in
-  reset();
+
+  (* This type is hacky, we would like t use wtac types *)
+  let f_type =
+    Types.FunType { param_types = [ Types.Bool ]; ret_type = [ Types.Int ] }
+  in
+  let fun_le =
+    Wtac.Function
+      {
+        name = "length";
+        body = instrs;
+        params = [ p_name ];
+        f_type;
+        locals = !vars;
+      }
+  in
+  reset ();
   fun_le
 
 (* Helper to compute offset
@@ -172,9 +188,16 @@ let rec expr_gen = function
       let e2_instr, v_e2 = expr_gen e2 in
       let w_op = convert_binop op in
       let e_ty = type_and_unfold e1 in
-      let res_type = match op with 
-      | Eq | Neq | Lt | Leq | Gt | Geq -> Types.Bool 
-      | _ -> e_ty
+      let res_type =
+        match op with
+        | Eq
+        | Neq
+        | Lt
+        | Leq
+        | Gt
+        | Geq ->
+            Types.Bool
+        | _ -> e_ty
       in
       let dst = make_wtac_var [ res_type ] in
       let w_bin =
@@ -187,13 +210,16 @@ let rec expr_gen = function
       (* TODO : For type need to lookup function call.
          However, if it returns multiple ones then the return type is wrong
            and we need to do additional work *)
-         (* Only match with single return *)
-        let ret_type = match (Symbols.get name).t with
-        | Types.FunType{ret_type=[r]; _} -> r
-        | _ -> failwith "Internal Error: Function call should have a function type"
-        in
+      (* Only match with single return *)
+      print_endline name;
+      let ret_type =
+        match (Symbols.get name).t with
+        | Types.FunType { ret_type = [ r ]; _ } -> r
+        | g -> print_endline (Types.show g);
+            failwith "Internal Error: Function call should have a function type or single return type for now"
+      in
 
-        let dst = make_wtac_var [ ret_type ] in
+      let dst = make_wtac_var [ ret_type ] in
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
       ( List.flatten arg_instrs
         @ [ W.FCall { name; args = arg_vals; dst = Some dst } ],
@@ -238,29 +264,56 @@ let rec expr_gen = function
       in
       let mem_dst = mem_of_wtac_var fin_addr in
       (e2_instr @ e1_instr @ [ offset; offset_instr ], mem_dst)
-  | ArrayLit es -> 
-    let es_ty = List.map Typecheck.typecheck_expr es in
-    let elem_type = match es_ty with 
-    (* This happens for {} we still mallo to store length *)
-    | [] -> Types.Int 
-    | [e_ty]::_ -> e_ty 
-    | _ -> failwith "Internal Error: Array contains tuple type"
-  in  
-    let len = List.length es in
-    let arr_ptr, arr_instr = arr_offset_calculation (Imm (len, I64)) elem_type in 
-    let move_helper i e = 
-      let e_instr, e_res = expr_gen e in
-      let offset_dst = make_wtac_var [Types.Bool] in
-      let offset = W.Binary{op=Mult; src1 = Imm (i, I32); src2= W.Imm(Types.get_size elem_type, I32); dst = offset_dst; t =I32} in
-      let offset_ptr_dst = make_wtac_var [Types.Array{elem_type}]
-      in 
-      let ptr_offset_instr = W.Binary{op=Add; src1= arr_ptr; src2 = offset_dst; dst=offset_ptr_dst; t=I32} in
-      let move = W.Copy{src=e_res; dst=mem_of_wtac_var offset_ptr_dst; t= convert_type elem_type} in 
-      e_instr @ [offset; ptr_offset_instr; move]
-    in
-    let instr = List.mapi move_helper es |> List.flatten in
+  | ArrayLit es ->
+      let es_ty = List.map Typecheck.typecheck_expr es in
+      let elem_type =
+        match es_ty with
+        (* This happens for {} we still mallo to store length *)
+        | [] -> Types.Int
+        | [ e_ty ] :: _ -> e_ty
+        | _ -> failwith "Internal Error: Array contains tuple type"
+      in
+      let len = List.length es in
+      let arr_ptr, arr_instr =
+        arr_offset_calculation (Imm (len, I64)) elem_type
+      in
+      let move_helper i e =
+        let e_instr, e_res = expr_gen e in
+        let offset_dst = make_wtac_var [ Types.Bool ] in
+        let offset =
+          W.Binary
+            {
+              op = Mult;
+              src1 = Imm (i, I32);
+              src2 = W.Imm (Types.get_size elem_type, I32);
+              dst = offset_dst;
+              t = I32;
+            }
+        in
+        let offset_ptr_dst = make_wtac_var [ Types.Array { elem_type } ] in
+        let ptr_offset_instr =
+          W.Binary
+            {
+              op = Add;
+              src1 = arr_ptr;
+              src2 = offset_dst;
+              dst = offset_ptr_dst;
+              t = I32;
+            }
+        in
+        let move =
+          W.Copy
+            {
+              src = e_res;
+              dst = mem_of_wtac_var offset_ptr_dst;
+              t = convert_type elem_type;
+            }
+        in
+        e_instr @ [ offset; ptr_offset_instr; move ]
+      in
+      let instr = List.mapi move_helper es |> List.flatten in
 
-    arr_instr @ instr, arr_ptr
+      (arr_instr @ instr, arr_ptr)
 
 and gen_unary op e =
   let e_instr, v_e = expr_gen e in
@@ -391,6 +444,12 @@ let rec array_init_help elem_t dims =
   | _ ->
       failwith "Internal Error: Array Init helper needs at least one dimension!"
 
+let assign_target_gen = function
+  | Ast.E e -> expr_gen e
+  | V vdecl ->
+      update_locals vdecl.name vdecl.var_type;
+      ([], Var vdecl.name)
+
 let rec stmt_gen = function
   | Ast.Return es ->
       let instrs_ls, res_ls = List.map expr_gen es |> List.split in
@@ -428,12 +487,15 @@ let rec stmt_gen = function
         List.map gen_and_convert_expr rhs |> List.split
       in
       let rhs_ty = List.map Typecheck.typecheck_expr rhs in
-      let lhs_ty = List.map Typecheck.typecheck_expr lhs in
+      (* This typecheck actually adds declarations again whcih is not a problem
+         But just note that *)
+      let lhs_ty = List.map Typecheck.typecheck_assign_target lhs in
       (* TODO with arrays this will be trickier This are not converted *)
-      let instrs_lhs, lhs_res = List.map expr_gen lhs |> List.split in
+      let instrs_lhs, lhs_res = List.map assign_target_gen lhs |> List.split in
       (* generate a copy for each pair
          TODO This does not work. This can be unbalanced
          right now x,y = add() which returns 2 elements
+         Also var_declarations
          Function can return a multi value
          Also rhs needs to be copied into temporaries and then transfered*)
       let dst_rhs, rhs_instrs_copies =
@@ -464,7 +526,9 @@ let rec stmt_gen = function
       @ copies
   | Ast.Compound (Block bl) -> List.concat_map stmt_gen bl
   | If { guard; then_br; else_br } ->
-      let else_label, end_label = Unique_ids.make_label_pair "if_else" "if_end" in
+      let else_label, end_label =
+        Unique_ids.make_label_pair "if_else" "if_end"
+      in
       (* let end_label = Unique_ids.make_label "if_end" in *)
       (* let instrs = control_flow_gen guard t_label else_label in  *)
       let instrs, dst = expr_gen guard in
@@ -483,11 +547,19 @@ let rec stmt_gen = function
               @ W.[ Br end_label ]);
           }
       in
-      [ W.Block { label = end_label; body = [ else_block ] @ then_instrs @ W.[ Br end_label ] } ]
+      [
+        W.Block
+          {
+            label = end_label;
+            body = ([ else_block ] @ then_instrs @ W.[ Br end_label ]);
+          };
+      ]
   | Ast.While { guard; body } ->
       let instrs, dst = expr_gen guard in
       let body_instrs = stmt_gen body in
-      let block_label, loop_label = Unique_ids.make_label_pair "while_end" "while_loop" in
+      let block_label, loop_label =
+        Unique_ids.make_label_pair "while_end" "while_loop"
+      in
       (* let loop_label = Unique_ids.make_label "while_loop" in *)
       (* Negate condition *)
       let neg_dst = make_wtac_var [ Types.Bool ] in
@@ -537,4 +609,4 @@ let gen_top_level decl =
 let gen (Ast.Program decls) : Wtac.program =
   let length_fun = length_conversion () in
   let wtac_decls = List.map gen_top_level decls in
-  Wtac.Program (length_fun::wtac_decls)
+  Wtac.Program (length_fun :: wtac_decls)

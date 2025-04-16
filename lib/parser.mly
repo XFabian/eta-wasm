@@ -117,8 +117,9 @@ stmt:
     | name = VAR LPAREN; args=separated_list(COMMA,expr) RPAREN {Procedure {name; args}}
     ;
 lval:
-    | name = VAR {Var name}
-    | lv = lval ; LBRACK e= expr RBRACK {Subscript(lv, e)}
+    | id {E ($1)}
+    | name = VAR COLON t = type_spec {V {name; init=None; var_type=t}}
+    | arr_sub  {E ($1)}
     
 
 arr_decl_stmt:
@@ -138,6 +139,9 @@ arr_decl_stmt:
         ArrayDecl{name; a_type; dims; init}
     }
 
+id :
+| name = VAR {Var name}
+| UNDERSCORE {Var "_"}
 
 arr_sub: 
     | LBRACK e = expr RBRACK {e}  
@@ -152,8 +156,7 @@ postfix_expr:
     | primary_expr {$1}
     | e = postfix_expr; LBRACK e1= expr RBRACK {Subscript(e, e1)}
 primary_expr:
-    | name = VAR {Var name}
-    | UNDERSCORE {Var "_"}
+    | id {$1}
     | i = INT {Int i}
     | TRUE {Bool true}
     | FALSE {Bool false}
