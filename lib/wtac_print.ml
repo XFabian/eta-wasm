@@ -5,6 +5,7 @@ let comma_sep out () = Format.fprintf out ", "
 let pp_type out = function
   | I32 -> Format.pp_print_string out "i32"
   | I64 -> Format.pp_print_string out "i64"
+  | _ -> failwith "Internal Error: Function types not printed"
 let pp_un_op out = function
   | Negate -> Format.pp_print_string out "-"
   | Not -> Format.pp_print_string out "!"

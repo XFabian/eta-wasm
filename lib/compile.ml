@@ -52,6 +52,7 @@ let parse_file f_name =
   ast
 
 let compile stage src =
+  let _ = parse_stmt "if (2) {}" in
   let ast = parse_file src in
   if stage = Setting.Parse then print_endline (Ast.show_prog ast)
   else

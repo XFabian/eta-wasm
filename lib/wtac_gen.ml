@@ -85,7 +85,7 @@ let length_conversion () =
 
   (* This type is hacky, we would like t use wtac types *)
   let f_type =
-    Types.FunType { param_types = [ Types.Bool ]; ret_type = [ Types.Int ] }
+    W.FunType { param_type = [W.I32 ]; ret_type = Some W.I64 }
   in
   let fun_le =
     Wtac.Function
@@ -218,7 +218,31 @@ let rec expr_gen = function
         | g -> print_endline (Types.show g);
             failwith "Internal Error: Function call should have a function type or single return type for now"
       in
+      (* If we have multiple return values we need to create 
+      some stack variables and we need to have some space for them
+      The allocation was done before in the function
+      when we see the type of the function calls inside the functoin
+      We can caluate the space from taht
+      Bet would be if the functin modifies the argument list to have
+        the ptr to that locatin ready
+      Mem of some local that has the current stack pointer 
+      Need to get that location
+      and then offset from that pointer which is fixed because we know the return
+      type
+      Maybe store a offset in mem. So we could emit cleaner code
+      Mem
+      1. Use Tuple Type to represent functions with multiple returns
+      2. Functions calculate the amount of space they need
+        - Count function calls and their return type
+        - if bigger than 1 we need a pointer with that amount of space on the stack
+      3. Rewrite functions with this return type to take an additional parameter first
+        which is the ptr to store the result
+        Those functions also need to change how return is handled based on ret_type (which we have)
+        We store to the first parameter of the function
+      4. The rest happens in assign
+        - when such a function is called we need to emit loads from that pointer
 
+      *)
       let dst = make_wtac_var [ ret_type ] in
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
       ( List.flatten arg_instrs
@@ -583,8 +607,25 @@ let rec stmt_gen = function
 
 let gen_function Ast.{ name; params; f_type; body = Block stmts } =
   let instrs = List.concat_map stmt_gen stmts in
+  (* If return type has multiple values, we need to change the function type 
+  Invariant: The symbol table has the full tuple type now
+  So we can look it up there for function calls*)
+  let p_type, ret_t = match f_type with 
+  | Types.FunType{param_types; ret_type} -> param_types, ret_type
+  | _ -> failwith "Internal Error: Function with non-function type"
+  in
+  (* Convert function type If tuple type is returned
+  We convert by returning a pointer. This is added as a parameter to the
+  function *)
+  let converted_p_t = List.map convert_type p_type in
+  let new_p_t, new_ret_t = match ret_t with 
+  | [] -> converted_p_t, None 
+  | [r] -> converted_p_t, Some (convert_type r )
+  | _rs -> W.I32::converted_p_t, Some W.I32
+  in
+  let new_f_type = W.FunType{param_type=new_p_t; ret_type= new_ret_t} in
   let f =
-    Wtac.Function { name; body = instrs; params; f_type; locals = !vars }
+    Wtac.Function { name; body = instrs; params; f_type = new_f_type; locals = !vars }
   in
   reset ();
   f

@@ -10,7 +10,6 @@ let string_to_int_arr s =
 %}
 
 %token <string> VAR
-%token UNDERSCORE
 %token <int> INT
 %token <string> STRING
 %token PLUS MULT MINUS DIV MOD 
@@ -23,6 +22,7 @@ let string_to_int_arr s =
 %token RETURN IF ELSE WHILE
 %token BANG BAR AND
 %token EOF
+
 %nonassoc EQUAL
 %left BAR
 %left AND
@@ -102,7 +102,7 @@ block:
 stmt_top:
     | s =stmt; EOF {s}
 stmt: 
-    | RETURN ; es = separated_list(COMMA, expr) {Return es}
+    | RETURN  es = separated_list(COMMA, expr) {Return es}
     | arr_decl_stmt {$1}
     // Not arrats
     | name = VAR; COLON; ty = prim_type init = option(EQUAL e=expr {e}) %prec EQUAL
@@ -117,10 +117,16 @@ stmt:
     | name = VAR LPAREN; args=separated_list(COMMA,expr) RPAREN {Procedure {name; args}}
     ;
 lval:
-    | id {E ($1)}
+    | name = VAR {E (Var name)}
+    | arr = lval LBRACK e = expr RBRACK {
+        let arr_e = match arr with 
+        | E e -> e 
+        | V _ -> failwith "A declaration cannot be indexed"
+        in 
+        E (Subscript(arr_e, e))}
     | name = VAR COLON t = type_spec {V {name; init=None; var_type=t}}
-    | arr_sub  {E ($1)}
-    
+    // | postfix_expr  {E ($1)}
+    ;
 
 arr_decl_stmt:
     | name = VAR; COLON; pt= prim_type; 
@@ -139,9 +145,8 @@ arr_decl_stmt:
         ArrayDecl{name; a_type; dims; init}
     }
 
-id :
-| name = VAR {Var name}
-| UNDERSCORE {Var "_"}
+
+
 
 arr_sub: 
     | LBRACK e = expr RBRACK {e}  
@@ -149,21 +154,25 @@ arr_sub:
 // ----------------------------------
 expr_top:
     | e =expr ; EOF {e}
+    
 
 expr : 
-    | postfix_expr {$1} 
+    | unary_expr {$1} 
+    | e1 = expr; b = binop; e2 = expr {Binary (b, e1, e2)}
+
+unary_expr: 
+    | op = unary_op; e = expr  {Unary(op, e)}
+    | postfix_expr {$1}
 postfix_expr:
     | primary_expr {$1}
     | e = postfix_expr; LBRACK e1= expr RBRACK {Subscript(e, e1)}
 primary_expr:
-    | id {$1}
+    | name = VAR {Var name}
     | i = INT {Int i}
     | TRUE {Bool true}
     | FALSE {Bool false}
     | a = arrayLit {a}
     | s = STRING {Ast.ArrayLit (string_to_int_arr s)}
-    | op = unary_op; e = expr  {Unary(op, e)}
-    | e1 = expr; b = binop; e2 = expr {Binary (b, e1, e2)}
     | name = VAR; LPAREN args=separated_list(COMMA, expr) RPAREN  {FunCall{name; args}}
     | LPAREN e = expr RPAREN {e}
 

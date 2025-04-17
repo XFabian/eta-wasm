@@ -40,7 +40,7 @@ rule read =
     | "!" {BANG}
     | "|" {BAR}
     | "&" {AND} 
-    | "_" {UNDERSCORE}
+    | "_" {VAR "_"}
     | "int" {TINT}
     | "bool" {TBOOL}
     | "return" {RETURN}

@@ -2,7 +2,7 @@
    Has structured control flow
 *)
 
-type wtac_type = | I32 | I64 
+type wtac_type = | I32 | I64 | FunType of {param_type : wtac_type list; ret_type: wtac_type option}
 [@@deriving show]
 type unary_op = Negate | Not
 [@@deriving show]
@@ -70,7 +70,7 @@ type top_level =
       name : string;
       body : instruction list;
       params : string list;
-      f_type : Types.t;
+      f_type : wtac_type;
       locals : obj list;
     }
     (* After semantic nalysis we know that init has to be a literal const!

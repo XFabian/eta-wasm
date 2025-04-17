@@ -13,6 +13,7 @@ let emit_type = function
 let emit_wtype = function 
 | Wtac.I32 -> "i32"
 | I64 -> "i64"
+| FunType _ -> failwith "Internal Error:Wtac functoin types should not be handled here" 
 (* Equal and not equal depend on type of operands 
 Similar for add*)
 let emit_bin_op t out op = 
@@ -148,19 +149,18 @@ let rec emit_instruction chan = function
 
 let emit_top_level chan = function
   | Function
-      { name; body; locals; params; f_type = FunType { param_types; ret_type } }
+      { name; body; locals; params; f_type = FunType { param_type; ret_type } }
     ->
-      let combined_pt = List.combine params param_types in
+      let combined_pt = List.combine params param_type in
       let pp_v fmt (param, ty) =
-        Format.fprintf fmt "(param $%s %s) " param (emit_type ty)
+        Format.fprintf fmt "(param $%s %s) " param (emit_wtype ty)
       in
       Format.fprintf chan "@[<v 2>(func $%s " name;
       Format.pp_print_list pp_v chan combined_pt;
       (match ret_type with
-      | [ r_t ] -> Format.fprintf chan "(result %s)@," (emit_type r_t)
-      | [] -> Format.fprintf chan "@,"
-      | _ -> failwith "Multiple return types are not supported right now");
-
+      | Some r_t -> Format.fprintf chan "(result %s)@," (emit_wtype r_t)
+      | None -> Format.fprintf chan "@,"
+      );
       (* TODO check that out in Rust by returning a typle *)
       (* Define the locals of that function *)
 
