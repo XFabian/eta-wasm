@@ -1,0 +1,14 @@
+factorial(n: int): int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+main(args: int[][]): int {
+    result: int = factorial(5)
+    if result != 120 {
+        return 1
+    }
+    return 0
+}

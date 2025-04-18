@@ -1,0 +1,25 @@
+isIdentity(mat: int[][]): bool {
+    i: int = 0
+    while i < length(mat) {
+        j: int = 0
+        while j < length(mat[i]) {
+            if i == j & mat[i][j] != 1 {
+                return false
+            }
+            if i != j & mat[i][j] != 0 {
+                return false
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return true
+}
+
+main(args: int[][]): int {
+    m: int[][] = {{1,0,0}, {0,1,0}, {0,0,1}}
+    if !isIdentity(m) {
+        return 1
+    }
+    return 0
+}
