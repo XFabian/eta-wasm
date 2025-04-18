@@ -16,6 +16,10 @@ let convert_type = function
    This is the amount of stack space I need
 *)
 let curr_rsp : (W.value * int) ref = ref (W.Var "dummy", 0)
+
+(* Next ugly hack, stores the name of the current return pointer
+Make sure that it is only active when needed *)
+let curr_ret_ptr = ref "Dummy"
 let vars = ref []
 let reset () = vars := []
 
@@ -27,6 +31,13 @@ let update_locals name t =
    So that they are correctly called
    That should be done in the semantic analysis passt: T
 *)
+(* This function is used to create the ptr parameters for multiple return functions
+ *)
+let make_named_wtac_ptr () =
+  let dst_name = Unique_ids.make_named_tmp "ret_ptr" in
+  Symbols.add_local_var dst_name (Types.Array { elem_type = Types.Int });
+  dst_name
+
 let make_wtac_var ty =
   let dst_name = Unique_ids.make_temp () in
   let t =
@@ -216,7 +227,6 @@ let rec expr_gen = function
          However, if it returns multiple ones then the return type is wrong
            and we need to do additional work *)
       (* Only match with single return *)
-      print_endline name;
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
 
       match (Symbols.get name).t with
@@ -232,60 +242,65 @@ let rec expr_gen = function
              this needs to be global per function*)
           (* add rsp to paramters instructions as first *)
           (* This pointer is the first parameter to the new function *)
-          print_endline "In Multi return ";
+          let offset_ptr =
+            make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+          in
           let rsp_ptr =
             make_wtac_var [ Types.Array { elem_type = Types.Int } ]
           in
-          let cpy_instr = W.Copy { src = rsp; dst = rsp_ptr; t = W.I32 } in
+          let offset_instr =
+            W.Binary
+              {
+                op = Add;
+                src1 = rsp;
+                src2 = W.Imm (offset, W.I32);
+                dst = offset_ptr;
+                t = W.I32;
+              }
+          in
+          let cpy_instr =
+            W.Copy { src = offset_ptr; dst = rsp_ptr; t = W.I32 }
+          in
           let ret_size =
             List.fold_left (fun acc t -> acc + Types.get_size t) 0 rets
           in
           (* Need to align that size to nearest 16 *)
           (* Function then does not return anything! *)
           curr_rsp := (fst !curr_rsp, offset + Util.round_to_n ret_size 16);
-          (* Need to move the result of this call into its own temps *)
-          let r_tmp_and_cpys t = 
-            let r_temp = make_wtac_var [t] in 
-            let offset_ptr = make_wtac_var [Types.Array{elem_type=Types.Int}] in
-            let off_instr = W.Binary{op=Add; src1=rsp_ptr; src2= W.Imm(Types.get_size t, W.I32); dst= offset_ptr; t=W.I32} in 
-            let cpy = W.Copy{src=mem_of_wtac_var offset_ptr; dst=r_temp; t=W.I32} in 
-            r_temp, off_instr::[cpy]
-          in 
-          let _ret_temps,instrs_list = List.map r_tmp_and_cpys rets |> List.split in 
-          print_endline "End of mult return";
-          ( [ cpy_instr ] @ List.flatten arg_instrs
-            @ [ W.FCall { name; args = rsp_ptr :: arg_vals; dst = None } ]
-            @ List.flatten instrs_list,
+          (* Need to move the result of this call into its own temps
+          TODO: No this is done in assign actually  *)
+          let r_tmp_and_cpys t =
+            let r_temp = make_wtac_var [ t ] in
+            let offset_ptr =
+              make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+            in
+            let off_instr =
+              W.Binary
+                {
+                  op = Add;
+                  src1 = rsp_ptr;
+                  src2 = W.Imm (Types.get_size t, W.I32);
+                  dst = offset_ptr;
+                  t = W.I32;
+                }
+            in
+            let cpy =
+              W.Copy
+                { src = mem_of_wtac_var offset_ptr; dst = r_temp; t = W.I32 }
+            in
+            (r_temp, off_instr :: [ cpy ])
+          in
+          let _ret_temps, _instrs_list =
+            List.map r_tmp_and_cpys rets |> List.split
+          in
+          ( [ offset_instr; cpy_instr ]
+            @ List.flatten arg_instrs
+            @ [ W.FCall { name; args = rsp_ptr :: arg_vals; dst = None } ],
             rsp )
       | g ->
           print_endline (Types.show g);
           failwith
-            "Internal Error: Function call should have a function type or"
-      (* If we have multiple return values we need to create
-         some stack variables and we need to have some space for them
-         The allocation was done before in the function
-         when we see the type of the function calls inside the functoin
-         We can caluate the space from taht
-         Bet would be if the functin modifies the argument list to have
-           the ptr to that locatin ready
-         Mem of some local that has the current stack pointer
-         Need to get that location
-         and then offset from that pointer which is fixed because we know the return
-         type
-         Maybe store a offset in mem. So we could emit cleaner code
-         Mem
-         1. Use Tuple Type to represent functions with multiple returns
-         2. Functions calculate the amount of space they need
-           - Count function calls and their return type
-           - if bigger than 1 we need a pointer with that amount of space on the stack
-         3. Rewrite functions with this return type to take an additional parameter first
-           which is the ptr to store the result
-           Those functions also need to change how return is handled based on ret_type (which we have)
-           We store to the first parameter of the function
-         4. The rest happens in assign
-           - when such a function is called we need to emit loads from that pointer
-           Maybe easier to create the temps here and then return a list of values
-      *))
+            "Internal Error: Function call should have a function type or")
   | Subscript (e1, e2) ->
       (* Subscript itself returns a memory location
          Assign decides if we need to deref it or store to that location
@@ -388,15 +403,14 @@ and gen_unary op e =
 
 (* Thos does the converision of a[1] to its value
    So for memory accesses it creates a load to load from
-   This will be used everywhere except assignments *)
+   This will be used everywhere except assignments
+   But is not and I handle conversions correctly
+   However, could till be useful and may be used everywhere later *)
 let gen_and_convert_expr e =
   let instrs, res = expr_gen e in
-  print_endline "Failing here in gen_and_convert" ;
-  print_endline (Ast.show_expr e);
-  let e_ty = Typecheck.typecheck_expr e in 
+  let e_ty = Typecheck.typecheck_expr e in
   (* If functoin call we return a pointer Bool is converted to I32 *)
   let t = if List.length e_ty > 1 then Types.Bool else List.hd e_ty in
-  print_endline "After unfold";
   match res with
   | Mem _ as src ->
       let dst = make_wtac_var [ t ] in
@@ -520,15 +534,48 @@ let assign_target_gen = function
       ([], Var vdecl.name)
 
 let rec stmt_gen = function
-  | Ast.Return es ->
-      (* If multi return, rewrite to return nothing *)
-      (match es with 
-      | [e] -> 
-        print_endline "In return";
-        print_endline (Ast.show_expr e);
-        let instrs_ls, res_ls = gen_and_convert_expr e  in
-      instrs_ls @ [ Return [res_ls] ]
-      | _ -> [Return []])
+  | Ast.Return es -> (
+      match es with
+      | [ e ] ->
+          let instrs_ls, res_ls = gen_and_convert_expr e in
+          instrs_ls @ [ Return [ res_ls ] ]
+      | es ->
+          (* If multi return, store results in the current stack pointer
+        This value is always the first arg of the function*)
+          (* THis is a bit ugly in the debug wtac since just a 0 is pritned
+        Maybe get the string for that value
+        TODO: Probably best to create a state and accumulate *)
+          let store_ptr = W.Var !curr_ret_ptr in
+          let create_store_instr offset e =
+            let instr_e, res_e = gen_and_convert_expr e in
+            (* Has to be single type *)
+            let e_ty = List.hd (Typecheck.typecheck_expr e) in
+            let offset_ptr =
+              make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+            in
+            let offset_instr =
+              W.Binary
+                {
+                  op = Add;
+                  src1 = store_ptr;
+                  src2 = W.Imm (offset, W.I32);
+                  dst = offset_ptr;
+                  t = W.I32;
+                }
+            in
+            let copy_instr =
+              W.Copy
+                {
+                  src = res_e;
+                  dst = mem_of_wtac_var offset_ptr;
+                  t = convert_type e_ty;
+                }
+            in
+            let new_offset = offset + Types.get_size e_ty in
+            (new_offset, instr_e @ [ offset_instr; copy_instr ])
+          in
+          let _, instrs = List.fold_left_map create_store_instr 0 es in
+          List.flatten instrs @ [ Return [] ])
   | Ast.LocalDecl { name; init; var_type } -> (
       (* Ignore delcaration if it does not have an initializer.
          TODO: Wrong it still can be assigned to
@@ -558,11 +605,9 @@ let rec stmt_gen = function
           let tmp_ptr, instr = array_init_help elem_t filter_dims in
           instr @ [ W.Copy { src = tmp_ptr; dst = Var name; t = I32 } ])
   | Ast.Assign { lhs; rhs } ->
-    print_endline "In assign";
       let instrs_rhs, rhs_res =
         List.map gen_and_convert_expr rhs |> List.split
       in
-      print_endline "Converted rhs";
       let rhs_ty = List.map Typecheck.typecheck_expr rhs in
       (* This typecheck actually adds declarations again whcih is not a problem
          But just note that *)
@@ -575,17 +620,49 @@ let rec stmt_gen = function
          Also var_declarations
          Function can return a multi value
          Also rhs needs to be copied into temporaries and then transfered*)
+      (* TODO: NEeds to be factored out *)
       let dst_rhs, rhs_instrs_copies =
         List.fold_left_map
           (fun acc (rhs_v, rhs_t) ->
             match rhs_t with
             | [ t ] ->
                 let dst = make_wtac_var [ t ] in
-                (acc @ [ dst ], W.Copy { src = rhs_v; dst; t = convert_type t })
-            | _ ->
-                failwith
-                  "Function call assignments with multiple returns not handled \
-                   right now")
+                ( acc @ [ dst ],
+                  [ W.Copy { src = rhs_v; dst; t = convert_type t } ] )
+            | ts ->
+                let load_ret offset t =
+                  let offset_ptr =
+                    make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+                  in
+                  let ret_v = make_wtac_var [ t ] in
+                  let offset_instr =
+                    W.Binary
+                      {
+                        op = Add;
+                        src1 = rhs_v;
+                        src2 = W.Imm (offset, W.I32);
+                        dst = offset_ptr;
+                        t = W.I32;
+                      }
+                  in
+                  (* This creates it one go. Having a seperate register which then assigns would
+                  make a simpler instruction *)
+                  let copy_instr =
+                    W.Copy
+                      {
+                        src = mem_of_wtac_var offset_ptr;
+                        dst = ret_v;
+                        t = convert_type t;
+                      }
+                  in
+                  let new_offset = offset + Types.get_size t in
+                  (new_offset, (ret_v, [ offset_instr ] @ [ copy_instr ]))
+                in
+                let _, ret_values_copy_instr =
+                  List.fold_left_map load_ret 0 ts
+                in
+                let ret_values, copy_instr = List.split ret_values_copy_instr in
+                (acc @ ret_values, List.concat copy_instr))
           []
           (List.combine rhs_res rhs_ty)
       in
@@ -599,7 +676,8 @@ let rec stmt_gen = function
                      "Internal Error: Lvalues should only containt one type \
                       value")
       in
-      List.concat instrs_rhs @ List.concat instrs_lhs @ rhs_instrs_copies
+      List.concat instrs_rhs @ List.concat instrs_lhs
+      @ List.concat rhs_instrs_copies
       @ copies
   | Ast.Compound (Block bl) -> List.concat_map stmt_gen bl
   | If { guard; then_br; else_br } ->
@@ -659,27 +737,59 @@ let rec stmt_gen = function
       @ [ W.FCall { name; args = arg_vals; dst = None } ]
 
 let gen_function Ast.{ name; params; f_type; body = Block stmts } =
-  let instrs = List.concat_map stmt_gen stmts in
-  (* Set up a stack frame *)
-  (* Get rsp *)
   let rbp = make_wtac_var [ Types.Array { elem_type = Types.Int } ] in
   let stack_pointer = W.Var "__stack_pointer" in
   let copy_stk_ptr = W.Copy { src = stack_pointer; dst = rbp; t = W.I32 } in
+  (* Create ptr types here *)
+  let rsp = make_wtac_var [ Types.Array { elem_type = Types.Bool } ] in
+  let copy_rsp = W.Copy { src = stack_pointer; dst = rsp; t = W.I32 } in
+  print_endline ("Rsp is : " ^ Wtac.show_value rsp);
+
+  (* If return type has multiple values, we need to change the function type
+     Invariant: The symbol table has the full tuple type now
+     So we can look it up there for function calls*)
+  let p_type, ret_t =
+    match f_type with
+    | Types.FunType { param_types; ret_type } -> (param_types, ret_type)
+    | _ -> failwith "Internal Error: Function with non-function type"
+  in
+  (* Convert function type If tuple type is returned
+      We convert by returning a pointer. This is added as a parameter to the
+      function 
+      Also nothing returned*)
+  let converted_p_t = List.map convert_type p_type in
+  let new_p_t, new_ret_t, new_params =
+    match ret_t with
+    | [] -> (converted_p_t, None, params)
+    | [ r ] -> (converted_p_t, Some (convert_type r), params)
+    | _rs ->
+        let ret_ptr = make_named_wtac_ptr () in
+        curr_ret_ptr := ret_ptr;
+        (W.I32 :: converted_p_t, None, ret_ptr :: params)
+  in
+
+  let new_f_type = W.FunType { param_type = new_p_t; ret_type = new_ret_t } in
+
+  curr_rsp := (rsp, 0);
+
+  let instrs = List.concat_map stmt_gen stmts in
+  (* Reset rsp and offset for that functoin *)
+  let _, stack_offset = !curr_rsp in
   (* Decrement Stack Pointer by size we need to figure out*)
   let decr_stk_ptr_instr =
     W.Binary
       {
         op = Sub;
         src1 = stack_pointer;
-        src2 = W.Imm (100, W.I32);
+        src2 = W.Imm (stack_offset, W.I32);
         dst = stack_pointer;
         t = W.I32;
       }
   in
-  (* Create ptr types here *)
-  let rsp = make_wtac_var [ Types.Array { elem_type = Types.Bool } ] in
-  let copy_rsp = W.Copy { src = stack_pointer; dst = rsp; t = W.I32 } in
   let frame_setup = [ copy_stk_ptr; decr_stk_ptr_instr; copy_rsp ] in
+
+  (* Set up a stack frame *)
+  (* Get rsp *)
 
   (* Frame ending  Reset global ptr *)
   let reset_stk_ptr = W.Copy { src = rbp; dst = stack_pointer; t = W.I32 } in
@@ -694,32 +804,13 @@ let gen_function Ast.{ name; params; f_type; body = Block stmts } =
         List.rev instr' @ [ er ] @ frame_end @ [ W.Return [] ]
     | [] -> frame_setup @ frame_end @ [ W.Return [] ]
   in
-  (* If return type has multiple values, we need to change the function type
-     Invariant: The symbol table has the full tuple type now
-     So we can look it up there for function calls*)
-  let p_type, ret_t =
-    match f_type with
-    | Types.FunType { param_types; ret_type } -> (param_types, ret_type)
-    | _ -> failwith "Internal Error: Function with non-function type"
-  in
-  (* Convert function type If tuple type is returned
-     We convert by returning a pointer. This is added as a parameter to the
-     function *)
-  let converted_p_t = List.map convert_type p_type in
-  let new_p_t, new_ret_t =
-    match ret_t with
-    | [] -> (converted_p_t, None)
-    | [ r ] -> (converted_p_t, Some (convert_type r))
-    | _rs -> (W.I32 :: converted_p_t, Some W.I32)
-  in
 
-  let new_f_type = W.FunType { param_type = new_p_t; ret_type = new_ret_t } in
   let f =
     Wtac.Function
       {
         name;
         body = frame_setup @ body;
-        params;
+        params = new_params;
         f_type = new_f_type;
         locals = !vars;
       }
