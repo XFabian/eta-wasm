@@ -6,6 +6,7 @@
   (pps ppx_deriving.show ppx_sexp_conv))
   (modules 
   setting
+  util
   compile
   lexer
   parser
@@ -20,6 +21,7 @@
   wtac
   wtac_gen
   wtac_print
+  object_writer
   emit
   )
   (libraries sexplib)

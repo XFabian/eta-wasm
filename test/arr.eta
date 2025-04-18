@@ -1,0 +1,6 @@
+functionA () : int {
+    a : int[] = {1,2,4}
+    x : int = a[2]
+    return x
+
+}

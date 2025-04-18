@@ -1,46 +1,38 @@
-aTesting how compilation works to WebAssembly 
+# Wetac
+This is a compiler implementing the ETA programming language.
+The target is WASM or more specifically WAT
+
+An implementation of malloc can be linked
+
+### TODO Tomorrow 16.04
+## Stuff to do
+- Multi assign 
+    - Extend Assign lhs to contain not only expressions but a expressions or var declarations type T = V of var_decl
+- Add a tuple Type for functoins so that you can remove the list everywhere
+    - This is used only for internal reasoning. This wil change the types of functions on the wtac level, where tuple types do not exist.
+    A pointer as the first param will be added. Allocation has to be done by the caller.
+- use another eta compiler and compare. Alos use their tests and integrate them
+- use cram tests with wasmer to execute the wat files generated
+
+- Use LLMs to generate .eta files that are valid and use them as a test suite for the parser. Instruct he LLM to output 0 if the code is correct and something else if not.
+For example that the correct branch is executed.
 
 
-Starting with simple expressoins and going to variables etc.
-
-Maybe follow course with BOA language and stuff
-
-- [ ] Compile expression language down to real web assembly that can be executed
-
-This targets the WASM text format, which uses S expressions (has the ending .wat)
-The binary fomrat has the ending (.wasm)
-
-Using wasmer and external functions it is trivial to instrument the generated wasm code which makes it easy to inspect.
-Maybe using debug prints defined in Ocaml and then inserted there
+## Optimizations
+- [ ] Define stuff like Constant folding for example
+- [ ] Define a Dataflow analysis 
+- [ ] Define Dominator and
 
 
-I want to use WASI once to make the external function and not do it in Ocaml or Rust
-An example is here: https://blog.dkwr.de/development/wasi-load-fd-write/
-see hello.wat for it
-
-We cannot execute system calls inside wasm. That is not a capability
-So instead people defined the WebAssembly System Interface(WASI). which is also still developing
-It is an abstraction layer that different runtimes can now implement for systems. For example
-there is an fd_write in WASI. This can be mapped to the linux system call by a runtime to provide write functoinality to the OS!
-However, this abstraction can also be used in ht ebroweser. By providing a seperate implementation of the WASI fd_write function suitable for th ebrowser. This abstraction allows to write different implementatoins and you could even write your own!
-So it provides an interface
-See here for soe explanations: https://blog.dkwr.de/development/wasi-rust/
-and a more technical explanation here: https://hacks.mozilla.org/2019/03/standardizing-wasi-a-webassembly-system-interface/ This article seems very good!
-
-Now, there are runtimes that implement the WASI specification which allow you to execute a WASM module natively
 
 
-In my opinion the Wsmer rust lib seems better to use. 
-Maybe we can provide print utilites that the students can use and we create it with our rust library.
-Students can provide their own printers as well
 
-See the following example: https://github.com/wasmerio/wasmer/blob/main/examples/hello_world.rs
 
+MINUS VAR LBRACK VAR LBRACK INT RBRACK RBRACK
+MINUS VAR LBRACK VAR RBRACK
 ### Wasmer stuff
 
-wasmer run add.wasm --invoke add 5 3
 
-invokes a specific function if start is not registered
 
 Installation of libwasmer was troublesome
 I additionally installed clang right now (did not help)
@@ -64,26 +56,8 @@ dune utop is not working because of linking issues?
 
 TODO: Use Wasmer optoin to create-exe to create exe for simple program and then check the disasembly
 
-Also there are validation methods on the wasm code. That you can run for checks of your wasm files!
 
-### Entry Point
-WASM has a start directive (See here: https://webassembly.github.io/spec/core/syntax/modules.html#syntax-start)
-However, it is used of rht efollwing things:
-Initializing global variables
 
-Setting up memory or tables
-
-Performing setup tasks before exports are used
-
-Not meant for main program logic!
-
-In WASI (preview 1) we have the _start (Similar to POSIX) as entry point
-Just add (export "_start" (func $main)) in the end 
-
-### Running in the web 
-See index.html for a simple test
-Spin up a http server
-For example with python3 -m http.server 8000
 
 
 So no dynamically sized structures? Which can be fine I guess
@@ -107,20 +81,8 @@ Rust to wasm uses ots own stack management on top of the wasm stack
 See https://surma.dev/things/rust-to-webassembly/
 Note that the WASM stack is really implicit.
 
-There is a whole tool conventoins repo https://github.com/WebAssembly/tool-conventions/
-that diusses tuff like ABI and a global sta k pointer
 
 
-https://blog.dkwr.de/development/wasm-variable-instructions/
-We can introduce local variables using 
-(local i32)
-or 
-(local $x i32)
-
-
-So how about structs? 
-
-S
 
 Article on intro for WASM: https://rsms.me/wasm-intro#addressing-memory
 and every byte of wasm 
@@ -157,4 +119,17 @@ These arrays themselves can be somewehere else and are not layed out at teh same
 x[3][4] should be layed out in that way. Since we know all sizes statically.
 
 So it is not a problem actually. Still a little bit annoying.
-A parameter should not have a size (x : int[3]) not allowed that is not a type
+A parameter should not have a size (x : int[3]) not allowed that is not a type!
+
+For students
+
+WE mallo stuff but we are never freeing.
+Write this pass to free arrays when they are out of scope and not accessed anymore! So no references.
+Of course not always possible unless we do reference counting and GC!
+
+Even when we are not freeing it is not to bad since we are in WASM and it spis up a memory everytime we start th eprogram, which is teared down in the end.
+Its a little sandbox
+
+
+
+

@@ -35,6 +35,8 @@ type obj = { name : string; t : wtac_type }
 (* Mem should be a value as well for arrays for example
 Copy with a mem *)
 (* We tpe immediates so we know which size to emit *)
+(* Mem should take an offset to make some array accesses easier
+also store and load also take an offset *)
 type value = Imm of int * wtac_type | Var of string | Mem of string
 [@@deriving show]
 

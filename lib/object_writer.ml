@@ -4,6 +4,9 @@
 file. This is easiest.
 Long term we would like to just emit this wasm object file instead
 of writing the wat file
+https://danielmangum.com/posts/every-byte-wasm-module/ might be helpful
+Also the write in Lobster. https://github.com/aardappel/lobster/blob/master/docs/source/implementation_wasm_REMOVED.md
+
 *)
 
 

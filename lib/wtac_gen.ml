@@ -9,6 +9,13 @@ let convert_type = function
       W.I32
   | _ -> failwith "Internal Error: Cannot convert functoin type"
 
+(* Ugly hack for now
+   I track the rsp used by this function so I can acess it in the function call
+   to reserve space when multi return is active
+   I also store the current offset inside here.
+   This is the amount of stack space I need
+*)
+let curr_rsp : (W.value * int) ref = ref (W.Var "dummy", 0)
 let vars = ref []
 let reset () = vars := []
 
@@ -84,9 +91,7 @@ let length_conversion () =
   in
 
   (* This type is hacky, we would like t use wtac types *)
-  let f_type =
-    W.FunType { param_type = [W.I32 ]; ret_type = Some W.I64 }
-  in
+  let f_type = W.FunType { param_type = [ W.I32 ]; ret_type = Some W.I64 } in
   let fun_le =
     Wtac.Function
       {
@@ -206,48 +211,81 @@ let rec expr_gen = function
       in
       let instrs = e1_instr @ e2_instr @ [ w_bin ] in
       (instrs, dst)
-  | FunCall { name; args } ->
+  | FunCall { name; args } -> (
       (* TODO : For type need to lookup function call.
          However, if it returns multiple ones then the return type is wrong
            and we need to do additional work *)
       (* Only match with single return *)
       print_endline name;
-      let ret_type =
-        match (Symbols.get name).t with
-        | Types.FunType { ret_type = [ r ]; _ } -> r
-        | g -> print_endline (Types.show g);
-            failwith "Internal Error: Function call should have a function type or single return type for now"
-      in
-      (* If we have multiple return values we need to create 
-      some stack variables and we need to have some space for them
-      The allocation was done before in the function
-      when we see the type of the function calls inside the functoin
-      We can caluate the space from taht
-      Bet would be if the functin modifies the argument list to have
-        the ptr to that locatin ready
-      Mem of some local that has the current stack pointer 
-      Need to get that location
-      and then offset from that pointer which is fixed because we know the return
-      type
-      Maybe store a offset in mem. So we could emit cleaner code
-      Mem
-      1. Use Tuple Type to represent functions with multiple returns
-      2. Functions calculate the amount of space they need
-        - Count function calls and their return type
-        - if bigger than 1 we need a pointer with that amount of space on the stack
-      3. Rewrite functions with this return type to take an additional parameter first
-        which is the ptr to store the result
-        Those functions also need to change how return is handled based on ret_type (which we have)
-        We store to the first parameter of the function
-      4. The rest happens in assign
-        - when such a function is called we need to emit loads from that pointer
-
-      *)
-      let dst = make_wtac_var [ ret_type ] in
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
-      ( List.flatten arg_instrs
-        @ [ W.FCall { name; args = arg_vals; dst = Some dst } ],
-        dst )
+
+      match (Symbols.get name).t with
+      | Types.FunType { ret_type = [ r ]; _ } ->
+          let dst = make_wtac_var [ r ] in
+          ( List.flatten arg_instrs
+            @ [ W.FCall { name; args = arg_vals; dst = Some dst } ],
+            dst )
+      | Types.FunType { ret_type = _ :: _ as rets; _ } ->
+          let rsp, offset = !curr_rsp in
+          (* Get RSP from current function.... its just a temp
+             curr_offset + new offset
+             this needs to be global per function*)
+          (* add rsp to paramters instructions as first *)
+          (* This pointer is the first parameter to the new function *)
+          print_endline "In Multi return ";
+          let rsp_ptr =
+            make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+          in
+          let cpy_instr = W.Copy { src = rsp; dst = rsp_ptr; t = W.I32 } in
+          let ret_size =
+            List.fold_left (fun acc t -> acc + Types.get_size t) 0 rets
+          in
+          (* Need to align that size to nearest 16 *)
+          (* Function then does not return anything! *)
+          curr_rsp := (fst !curr_rsp, offset + Util.round_to_n ret_size 16);
+          (* Need to move the result of this call into its own temps *)
+          let r_tmp_and_cpys t = 
+            let r_temp = make_wtac_var [t] in 
+            let offset_ptr = make_wtac_var [Types.Array{elem_type=Types.Int}] in
+            let off_instr = W.Binary{op=Add; src1=rsp_ptr; src2= W.Imm(Types.get_size t, W.I32); dst= offset_ptr; t=W.I32} in 
+            let cpy = W.Copy{src=mem_of_wtac_var offset_ptr; dst=r_temp; t=W.I32} in 
+            r_temp, off_instr::[cpy]
+          in 
+          let _ret_temps,instrs_list = List.map r_tmp_and_cpys rets |> List.split in 
+          print_endline "End of mult return";
+          ( [ cpy_instr ] @ List.flatten arg_instrs
+            @ [ W.FCall { name; args = rsp_ptr :: arg_vals; dst = None } ]
+            @ List.flatten instrs_list,
+            rsp )
+      | g ->
+          print_endline (Types.show g);
+          failwith
+            "Internal Error: Function call should have a function type or"
+      (* If we have multiple return values we need to create
+         some stack variables and we need to have some space for them
+         The allocation was done before in the function
+         when we see the type of the function calls inside the functoin
+         We can caluate the space from taht
+         Bet would be if the functin modifies the argument list to have
+           the ptr to that locatin ready
+         Mem of some local that has the current stack pointer
+         Need to get that location
+         and then offset from that pointer which is fixed because we know the return
+         type
+         Maybe store a offset in mem. So we could emit cleaner code
+         Mem
+         1. Use Tuple Type to represent functions with multiple returns
+         2. Functions calculate the amount of space they need
+           - Count function calls and their return type
+           - if bigger than 1 we need a pointer with that amount of space on the stack
+         3. Rewrite functions with this return type to take an additional parameter first
+           which is the ptr to store the result
+           Those functions also need to change how return is handled based on ret_type (which we have)
+           We store to the first parameter of the function
+         4. The rest happens in assign
+           - when such a function is called we need to emit loads from that pointer
+           Maybe easier to create the temps here and then return a list of values
+      *))
   | Subscript (e1, e2) ->
       (* Subscript itself returns a memory location
          Assign decides if we need to deref it or store to that location
@@ -353,7 +391,12 @@ and gen_unary op e =
    This will be used everywhere except assignments *)
 let gen_and_convert_expr e =
   let instrs, res = expr_gen e in
-  let t = type_and_unfold e in
+  print_endline "Failing here in gen_and_convert" ;
+  print_endline (Ast.show_expr e);
+  let e_ty = Typecheck.typecheck_expr e in 
+  (* If functoin call we return a pointer Bool is converted to I32 *)
+  let t = if List.length e_ty > 1 then Types.Bool else List.hd e_ty in
+  print_endline "After unfold";
   match res with
   | Mem _ as src ->
       let dst = make_wtac_var [ t ] in
@@ -468,6 +511,8 @@ let rec array_init_help elem_t dims =
   | _ ->
       failwith "Internal Error: Array Init helper needs at least one dimension!"
 
+(* TODO; Statements not using expr gen and convert!
+   But not super necessary. I aparently handle it already *)
 let assign_target_gen = function
   | Ast.E e -> expr_gen e
   | V vdecl ->
@@ -476,8 +521,14 @@ let assign_target_gen = function
 
 let rec stmt_gen = function
   | Ast.Return es ->
-      let instrs_ls, res_ls = List.map expr_gen es |> List.split in
-      List.concat instrs_ls @ [ Return res_ls ]
+      (* If multi return, rewrite to return nothing *)
+      (match es with 
+      | [e] -> 
+        print_endline "In return";
+        print_endline (Ast.show_expr e);
+        let instrs_ls, res_ls = gen_and_convert_expr e  in
+      instrs_ls @ [ Return [res_ls] ]
+      | _ -> [Return []])
   | Ast.LocalDecl { name; init; var_type } -> (
       (* Ignore delcaration if it does not have an initializer.
          TODO: Wrong it still can be assigned to
@@ -507,9 +558,11 @@ let rec stmt_gen = function
           let tmp_ptr, instr = array_init_help elem_t filter_dims in
           instr @ [ W.Copy { src = tmp_ptr; dst = Var name; t = I32 } ])
   | Ast.Assign { lhs; rhs } ->
+    print_endline "In assign";
       let instrs_rhs, rhs_res =
         List.map gen_and_convert_expr rhs |> List.split
       in
+      print_endline "Converted rhs";
       let rhs_ty = List.map Typecheck.typecheck_expr rhs in
       (* This typecheck actually adds declarations again whcih is not a problem
          But just note that *)
@@ -607,25 +660,69 @@ let rec stmt_gen = function
 
 let gen_function Ast.{ name; params; f_type; body = Block stmts } =
   let instrs = List.concat_map stmt_gen stmts in
-  (* If return type has multiple values, we need to change the function type 
-  Invariant: The symbol table has the full tuple type now
-  So we can look it up there for function calls*)
-  let p_type, ret_t = match f_type with 
-  | Types.FunType{param_types; ret_type} -> param_types, ret_type
-  | _ -> failwith "Internal Error: Function with non-function type"
+  (* Set up a stack frame *)
+  (* Get rsp *)
+  let rbp = make_wtac_var [ Types.Array { elem_type = Types.Int } ] in
+  let stack_pointer = W.Var "__stack_pointer" in
+  let copy_stk_ptr = W.Copy { src = stack_pointer; dst = rbp; t = W.I32 } in
+  (* Decrement Stack Pointer by size we need to figure out*)
+  let decr_stk_ptr_instr =
+    W.Binary
+      {
+        op = Sub;
+        src1 = stack_pointer;
+        src2 = W.Imm (100, W.I32);
+        dst = stack_pointer;
+        t = W.I32;
+      }
+  in
+  (* Create ptr types here *)
+  let rsp = make_wtac_var [ Types.Array { elem_type = Types.Bool } ] in
+  let copy_rsp = W.Copy { src = stack_pointer; dst = rsp; t = W.I32 } in
+  let frame_setup = [ copy_stk_ptr; decr_stk_ptr_instr; copy_rsp ] in
+
+  (* Frame ending  Reset global ptr *)
+  let reset_stk_ptr = W.Copy { src = rbp; dst = stack_pointer; t = W.I32 } in
+  let frame_end = [ reset_stk_ptr ] in
+  (* Frame end before return instruction
+     Also adds a return if there is none
+       If there is no body we still add frame info*)
+  let body =
+    match List.rev instrs with
+    | (W.Return _ as r) :: instr' -> List.rev instr' @ frame_end @ [ r ]
+    | (_ as er) :: instr' ->
+        List.rev instr' @ [ er ] @ frame_end @ [ W.Return [] ]
+    | [] -> frame_setup @ frame_end @ [ W.Return [] ]
+  in
+  (* If return type has multiple values, we need to change the function type
+     Invariant: The symbol table has the full tuple type now
+     So we can look it up there for function calls*)
+  let p_type, ret_t =
+    match f_type with
+    | Types.FunType { param_types; ret_type } -> (param_types, ret_type)
+    | _ -> failwith "Internal Error: Function with non-function type"
   in
   (* Convert function type If tuple type is returned
-  We convert by returning a pointer. This is added as a parameter to the
-  function *)
+     We convert by returning a pointer. This is added as a parameter to the
+     function *)
   let converted_p_t = List.map convert_type p_type in
-  let new_p_t, new_ret_t = match ret_t with 
-  | [] -> converted_p_t, None 
-  | [r] -> converted_p_t, Some (convert_type r )
-  | _rs -> W.I32::converted_p_t, Some W.I32
+  let new_p_t, new_ret_t =
+    match ret_t with
+    | [] -> (converted_p_t, None)
+    | [ r ] -> (converted_p_t, Some (convert_type r))
+    | _rs -> (W.I32 :: converted_p_t, Some W.I32)
   in
-  let new_f_type = W.FunType{param_type=new_p_t; ret_type= new_ret_t} in
+
+  let new_f_type = W.FunType { param_type = new_p_t; ret_type = new_ret_t } in
   let f =
-    Wtac.Function { name; body = instrs; params; f_type = new_f_type; locals = !vars }
+    Wtac.Function
+      {
+        name;
+        body = frame_setup @ body;
+        params;
+        f_type = new_f_type;
+        locals = !vars;
+      }
   in
   reset ();
   f
@@ -650,4 +747,7 @@ let gen_top_level decl =
 let gen (Ast.Program decls) : Wtac.program =
   let length_fun = length_conversion () in
   let wtac_decls = List.map gen_top_level decls in
+  (* Very ugly right now. SHould be added as Data *)
+  Symbols.add_global_var "__stack_pointer"
+    (Types.Array { elem_type = Types.Int });
   Wtac.Program (length_fun :: wtac_decls)
