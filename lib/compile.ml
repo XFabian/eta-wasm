@@ -57,9 +57,8 @@ let compile stage src =
   if stage = Setting.Parse then print_endline (Ast.show_prog ast)
   else
     let _res_vars_state, res_ast = Resolve.resolve ast in
-    print_endline (Ast.show_prog res_ast);
     Typecheck.typecheck res_ast;
-    if stage = Setting.Validate then ()
+    if stage = Setting.Validate then print_endline (Ast.show_prog res_ast)
     else
       (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in

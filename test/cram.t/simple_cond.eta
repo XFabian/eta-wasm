@@ -1,0 +1,11 @@
+isEven(n: int): bool {
+    return n % 2 == 0
+}
+
+main(args: int[][]): int {
+    x: int = 4
+    if !isEven(x) {
+        return 1
+    }
+    return 0
+}

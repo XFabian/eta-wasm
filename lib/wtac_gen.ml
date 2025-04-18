@@ -743,7 +743,6 @@ let gen_function Ast.{ name; params; f_type; body = Block stmts } =
   (* Create ptr types here *)
   let rsp = make_wtac_var [ Types.Array { elem_type = Types.Bool } ] in
   let copy_rsp = W.Copy { src = stack_pointer; dst = rsp; t = W.I32 } in
-  print_endline ("Rsp is : " ^ Wtac.show_value rsp);
 
   (* If return type has multiple values, we need to change the function type
      Invariant: The symbol table has the full tuple type now
