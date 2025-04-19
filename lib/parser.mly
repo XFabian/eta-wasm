@@ -17,7 +17,7 @@ let string_to_int_arr s =
 %token NEQ DEQUALS
 %token TRUE FALSE
 %token LPAREN RPAREN LBRACE RBRACE LBRACK RBRACK
-%token COLON COMMA EQUAL
+%token COLON COMMA EQUAL SEMICOLON
 %token TINT TBOOL
 %token RETURN IF ELSE WHILE
 %token BANG BAR AND
@@ -97,10 +97,14 @@ prim_type:
     | TINT {Types.Int}
     | TBOOL {Types.Bool}
 block:
-    | block_items = list(stmt) {Block block_items}
+    | block_items = list(stmt_opt_semi) {Block block_items}
 
 stmt_top:
     | s =stmt; EOF {s}
+
+stmt_opt_semi:
+    | stmt {$1}
+    | stmt; SEMICOLON {$1}
 stmt: 
     | RETURN  es = separated_list(COMMA, expr) {Return es}
     | arr_decl_stmt {$1}

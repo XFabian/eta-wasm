@@ -36,6 +36,7 @@ rule read =
     | "]" {RBRACK}
     | ":" {COLON}
     | "," {COMMA}
+    | ";" {SEMICOLON}
     | "=" {EQUAL}
     | "!" {BANG}
     | "|" {BAR}

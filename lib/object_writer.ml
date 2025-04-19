@@ -7,7 +7,8 @@ of writing the wat file
 https://danielmangum.com/posts/every-byte-wasm-module/ might be helpful
 Also the write in Lobster. https://github.com/aardappel/lobster/blob/master/docs/source/implementation_wasm_REMOVED.md
 
+Parse by checking the section header and the length
+Skip until custom is found with the correct name
 *)
 
-
-
+type binary_reader = { buf : Buffer.t; section_size : int }
