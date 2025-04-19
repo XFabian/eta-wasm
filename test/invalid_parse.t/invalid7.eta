@@ -1,0 +1,7 @@
+main(args: int[][]): int {
+    if (true) {
+        x: int = 1
+    } else 
+        y: int = 2
+    return 0
+}

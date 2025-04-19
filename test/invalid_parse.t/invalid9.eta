@@ -1,0 +1,8 @@
+func(): int, int {
+    return 1
+}
+
+main(args: int[][]): int {
+    a: int, b: int = func()
+    return 0
+}

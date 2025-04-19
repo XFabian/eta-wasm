@@ -1,0 +1,4 @@
+main(args: int[][]): int {
+    a: int, b: int = 1
+    return 0
+}

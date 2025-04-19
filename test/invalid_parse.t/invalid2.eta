@@ -1,0 +1,5 @@
+main(args: int[][]): int {
+    x: int = 3
+    return x
+    x = x + 1
+}
