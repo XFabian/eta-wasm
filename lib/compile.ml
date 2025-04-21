@@ -62,9 +62,10 @@ let compile stage src =
     else
       (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in
-      (* let cfg = Cfg.make_cfg wtac in
+      let cfg = Cfg.make_cfg wtac in
       let cfg_fun1 = List.hd (List.tl cfg) in
-      Cfg.print_cfg "cfg_test.dot" cfg_fun1; *)
+      Cfg.print_cfg "cfg_test.dot" cfg_fun1;
+      Cfg.optimize cfg_fun1;
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in
