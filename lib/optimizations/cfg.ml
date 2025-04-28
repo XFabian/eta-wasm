@@ -15,15 +15,22 @@ let make_id () =
 type basic_block = {
   id : int;
   (* label : string; *)
-  instructions : Wtac.instruction list;
+  (* Labelled instructoin *)
+  lab_instructions : (int * Wtac.instruction) list;
   (* terminator : Wtac.instruction; *)
   mutable preds : int list;
   mutable succs : int list;
 }
 
+(* TODO Hack to get instruction ids
+   id is the id of the block
+   n is the number of the instruciton in the basic block *)
+let get_instr_id id n = (id * 1000) + n
+
 let new_empty_block instr =
   let id = make_id () in
-  { id; instructions = instr; preds = []; succs = [] }
+  let lab_instr = List.mapi (fun i instr -> (get_instr_id id i, instr)) instr in
+  { id; lab_instructions = lab_instr; preds = []; succs = [] }
 
 let is_terminator = function
   | Wtac.Br _
@@ -141,7 +148,7 @@ let add_edge from to_ =
    Thus, we remove it in the actual fold call *)
 let add_edges blocks =
   let edge_helper (_, b) =
-    let last = List.hd (List.rev b.instructions) in
+    let last = snd (List.hd (List.rev b.lab_instructions)) in
     match last with
     | Br l ->
         let to_id = Hashtbl.find resolver_map l in
@@ -216,31 +223,31 @@ let make_cfg (Wtac.Program decls) =
   |> List.map cfg_helper
 
 (* let cfg_to_fn cfg =
-  (* Remove main and exit *)
-  let _, blocks = cfg.blocks |> List.split
-  (* Start with ids as index
-  We can skip basic blocks if we converted them already
-    For example in if and while
-      Recursively solve them and then continue afterwards *)
-  let b_helper b = 
-    let instrs = b.instructions in 
-    (* Check outgoing edges *)
-    match b.succs with 
-    | [] -> (* Only exit has that *)
-        []
-    | s -> (* Return and main*)
-        List.assoc cfg
-    | s1::s2 -> (* If and loops*)
-    (* Its a loop if the predecessor of that block has a higher id in the cfg
-      Then it is a later block that loops back *)
-    let bb_s1 = List.assoc s1 cfg.blocks
-  in
-  let wtac_file = Filename.chop_extension "cfg_recover.wtac" in
-  let chan = open_out wtac_file in
-  let formatter = Format.formatter_of_out_channel chan in
+   (* Remove main and exit *)
+   let _, blocks = cfg.blocks |> List.split
+   (* Start with ids as index
+   We can skip basic blocks if we converted them already
+     For example in if and while
+       Recursively solve them and then continue afterwards *)
+   let b_helper b =
+     let instrs = b.instructions in
+     (* Check outgoing edges *)
+     match b.succs with
+     | [] -> (* Only exit has that *)
+         []
+     | s -> (* Return and main*)
+         List.assoc cfg
+     | s1::s2 -> (* If and loops*)
+     (* Its a loop if the predecessor of that block has a higher id in the cfg
+       Then it is a later block that loops back *)
+     let bb_s1 = List.assoc s1 cfg.blocks
+   in
+   let wtac_file = Filename.chop_extension "cfg_recover.wtac" in
+   let chan = open_out wtac_file in
+   let formatter = Format.formatter_of_out_channel chan in
 
-  Wtac_print.pp_top_level formatter;
-  close_out chan *)
+   Wtac_print.pp_top_level formatter;
+   close_out chan *)
 
 let compute_dominator = ()
 let compute_dominator_tree = ()
@@ -252,11 +259,11 @@ let pp_basic_block fmt (block : basic_block) =
   let open Format in
   fprintf fmt "\"Block %d\" [label=\"%d:\\l" block.id block.id;
   List.iter
-    (fun instr ->
+    (fun (_, instr) ->
       fprintf fmt "  ";
       Wtac_print.pp_instruction fmt instr;
       fprintf fmt "\\l")
-    block.instructions;
+    block.lab_instructions;
   fprintf fmt "\"];\n";
   List.iter
     (fun succ -> fprintf fmt "\"Block %d\" -> \"Block %d\";\n" block.id succ)
@@ -291,11 +298,12 @@ let cfg_to_dot cfg =
   List.iter
     (fun (id, block) ->
       let label =
-        match block.instructions with
+        match block.lab_instructions with
         | [] -> Printf.sprintf "Block %d" id
-        | x :: xs ->
+        | (i, x) :: xs ->
             Printf.sprintf "Block %d: \n %s" id
-              (show_instruction (List.hd (List.rev (x :: xs))))
+              (* This gets the exit block *)
+              (show_instruction (snd (List.hd (List.rev ((i, x) :: xs)))))
       in
       Buffer.add_string buffer
         (Printf.sprintf "%d [shape=record,label=\"%s \"];\n" id label))
@@ -318,239 +326,120 @@ let write_dot_file filename contents =
   close_out oc
 
 (* Define use and def for statement
-uses: Sets of variables used by s
-defs: sets of variables defined by s
-Lift to block
-in n facts that hold on entry to node n
-out n facts that hold at exit of n
-Good slides: https://groups.seas.harvard.edu/courses/cs153/2019fa/lectures/Lec20-Dataflow-analysis.pdf
+   uses: Sets of variables used by s
+   defs: sets of variables defined by s
+   Lift to block
+   in n facts that hold on entry to node n
+   out n facts that hold at exit of n
+   Good slides: https://groups.seas.harvard.edu/courses/cs153/2019fa/lectures/Lec20-Dataflow-analysis.pdf
 *)
 
-(* Sets extended with prinintg *)
+(* let extract_var = function
+     | Var v -> Some v
+     | _ -> None
 
-(** Comparable, printable type *)
-module type OrdPrintT = sig
-  type t
+   let uses ((n, instr) : int * instruction) : IdSet.t =
+     let add_opt set v =
+       match extract_var v with
+       | Some x -> IdSet.add (n, x) set
+       | None -> set
+     in
+     let add_list set vs = List.fold_left add_opt set vs in
+     match instr with
+     | Return vals -> add_list IdSet.empty vals
+     | Unary { src; _ } -> add_opt IdSet.empty src
+     | Binary { src1; src2; _ } -> add_opt (add_opt IdSet.empty src1) src2
+     | Copy { src; _ } -> add_opt IdSet.empty src
+     | Load { src_ptr; _ } -> add_opt IdSet.empty src_ptr
+     | Store { src; _ } -> add_opt IdSet.empty src
+     | FCall { args; _ } -> add_list IdSet.empty args
+     | BrIf { cond; _ } -> add_opt IdSet.empty cond
+     | Br _
+     | Block _
+     | Loop _ ->
+         IdSet.empty (* uses would be handled recursively if needed *)
 
-  val compare : t -> t -> int
-  val to_string : t -> string
-end
+   let def_of_instr (instr : instruction) : string option =
+     match instr with
+     | Unary { dst; _ }
+     | Binary { dst; _ }
+     | Copy { dst; _ }
+     | Load { dst; _ }
+     | FCall { dst = Some dst; _ } -> (
+         match dst with
+         | Var v -> Some v
+         | _ -> None)
+     | Store { dst_ptr : value; _ } -> (
+         match dst_ptr with
+         | Var v -> Some v
+         | _ -> None)
+     | _ -> None
 
-module type SetS = sig
-  include Set.S
+   (* Data facts In and then union with gen *)
+   let gen (n, i) d =
+     let g =
+       match def_of_instr i with
+       | Some v -> IdSet.singleton (n, v)
+       | None -> IdSet.empty
+     in
+     IdSet.union d g
 
-  val to_string : t -> string
-  val string_of_elt : elt -> string
-  val pp : Format.formatter -> t -> unit
-end
-
-module MakeSet (Ord : OrdPrintT) : SetS with type elt = Ord.t = struct
-  include Set.Make (Ord)
-
-  let of_list = List.fold_left (fun s e -> add e s) empty
-
-  let to_string t =
-    let s = elements t |> List.map Ord.to_string |> String.concat ", " in
-    "{" ^ s ^ "}"
-
-  let string_of_elt = Ord.to_string
-  let pp f t = Format.pp_print_string f (to_string t)
-end
-
-(* Instantiate module *)
-
-module IdSet = MakeSet (struct
-  type t = int * string
-
-  let compare = compare
-  let to_string (i, s) = string_of_int i ^ ": " ^ s
-end)
-
-(** Extended maps *)
-module type MapS = sig
-  include Map.S
-
-  val update : ('a -> 'a) -> key -> 'a t -> 'a t
-  val find_or : 'a -> 'a t -> key -> 'a
-  val update_or : 'a -> ('a -> 'a) -> key -> 'a t -> 'a t
-  (* val diff_keys : ('a -> 'a -> int) -> 'a t -> 'a t -> key list *)
-
-  val to_string : (key -> 'a -> string) -> 'a t -> string
-  val printer : (key -> 'a -> string) -> Format.formatter -> 'a t -> unit
-end
-
-module MakeMap (Ord : OrdPrintT) : MapS with type key = Ord.t = struct
-  include Map.Make (Ord)
-
-  let update f k m = add k (f @@ find k m) m
-
-  let find_or d m k =
-    try find k m with
-    | Not_found -> d
-
-  (* let diff_keys cmp_v m n =
-      let module S = MakeSet(Ord) in
-      let has_binding_or_add m k v l =
-        try if cmp_v v @@ find k m == 0 then l else S.add k l
-        with Not_found -> S.add k l
-      in
-      S.empty |> fold (has_binding_or_add n) m
-              |> fold (has_binding_or_add m) n
-              |> S.elements *)
-
-  let update_or d f k m = add k (f @@ find_or d m k) m
-
-  let to_string val_str t =
-    let s =
-      bindings t
-      |> List.map (fun (k, v) -> Ord.to_string k ^ "=" ^ val_str k v)
-      |> String.concat ", "
-    in
-    "{" ^ s ^ "}"
-
-  let printer val_str f t = Format.pp_print_string f (to_string val_str t)
-end
-
-module VarMap = MakeMap (struct
-  type t = string
-
-  let compare = String.compare
-  let to_string s = s
-end)
-
-module IdMap = MakeMap (struct
-  type t = int
-
-  let compare = Int.compare
-  let to_string i = string_of_int i
-end)
-
-module IntSetS = MakeSet (struct
-  type t = int
-
-  let compare = Int.compare
-  let to_string = string_of_int
-end)
-
-let extract_var = function
-  | Var v -> Some v
-  | _ -> None
-
-let uses ((n, instr) : int * instruction) : IdSet.t =
-  let add_opt set v =
-    match extract_var v with
-    | Some x -> IdSet.add (n, x) set
-    | None -> set
-  in
-  let add_list set vs = List.fold_left add_opt set vs in
-  match instr with
-  | Return vals -> add_list IdSet.empty vals
-  | Unary { src; _ } -> add_opt IdSet.empty src
-  | Binary { src1; src2; _ } -> add_opt (add_opt IdSet.empty src1) src2
-  | Copy { src; _ } -> add_opt IdSet.empty src
-  | Load { src_ptr; _ } -> add_opt IdSet.empty src_ptr
-  | Store { src; _ } -> add_opt IdSet.empty src
-  | FCall { args; _ } -> add_list IdSet.empty args
-  | BrIf { cond; _ } -> add_opt IdSet.empty cond
-  | Br _
-  | Block _
-  | Loop _ ->
-      IdSet.empty (* uses would be handled recursively if needed *)
-
-let def_of_instr (instr : instruction) : string option =
-  match instr with
-  | Unary { dst; _ }
-  | Binary { dst; _ }
-  | Copy { dst; _ }
-  | Load { dst; _ }
-  | FCall { dst = Some dst; _ } -> (
-      match dst with
-      | Var v -> Some v
-      | _ -> None)
-  | Store { dst_ptr : value; _ } -> (
-      match dst_ptr with
-      | Var v -> Some v
-      | _ -> None)
-  | _ -> None
-
-(* Data facts In and then union with gen *)
-let gen (n, i) d =
-  let g =
-    match def_of_instr i with
-    | Some v -> IdSet.singleton (n, v)
-    | None -> IdSet.empty
-  in
-  IdSet.union d g
-
-let gen_map (n, instr) m =
-  match def_of_instr instr with
-  | Some v ->
-      ( VarMap.update_or (IntSetS.singleton n)
-          (fun old_val -> IntSetS.add n old_val)
-          v m,
-        n + 1 )
-  | None -> (m, n + 1)
+   let gen_map (n, instr) m =
+     match def_of_instr instr with
+     | Some v ->
+         ( VarMap.update_or (IntSetS.singleton n)
+             (fun old_val -> IntSetS.add n old_val)
+             v m,
+           n + 1 )
+     | None -> (m, n + 1) *)
 
 (* n is block id 
  * 100 gives space for 100 different isntructoins in this block *)
-let map_block n bb d_in =
-  fst
-    (List.fold_left
-       (fun (m, c) i -> gen_map (c, i) m)
-       (d_in, n * 100)
-       bb.instructions)
+(* let map_block n bb d_in =
+   fst
+     (List.fold_left
+        (fun (m, c) i -> gen_map (c, i) m)
+        (d_in, n * 100)
+        bb.instructions) *)
 
 (* Transfer function for a block *)
-let reach_block n bb (d_in : 'd) : 'd =
-  List.fold_left (fun d i -> gen (n, i) d) d_in bb.instructions
+(* let reach_block n bb (d_in : 'd) : 'd =
+     List.fold_left (fun d i -> gen (n, i) d) d_in bb.instructions
 
-let all_defs cfg =
-  let blocks = cfg.blocks in
-  let old =
-    List.fold_left (fun d (i, b) -> reach_block i b d) IdSet.empty blocks
+   let all_defs cfg =
+     let blocks = cfg.blocks in
+     let old =
+       List.fold_left (fun d (i, b) -> reach_block i b d) IdSet.empty blocks
+     in
+     let all_defs_map =
+       List.fold_left (fun d (i, b) -> map_block i b d) VarMap.empty blocks
+     in
+     print_endline
+       (VarMap.to_string
+          (fun _ v -> Printf.sprintf " %s" (IntSetS.to_string v))
+          all_defs_map);
+
+     (* So set is the locations of the defintions *)
+     old *)
+
+let printer_annot (annot : int -> string) (f : Format.formatter) (g : cfg) :
+    unit =
+  let open Format in
+  let print_block f' block =
+    List.iter
+      (fun (i, instr) ->
+        fprintf f' "%d: %a@," i
+        Wtac_print.pp_instruction instr)
+      block.lab_instructions
   in
-  let all_defs_map =
-    List.fold_left (fun d (i, b) -> map_block i b d) VarMap.empty blocks
-  in
-  print_endline
-    (VarMap.to_string
-       (fun _ v -> Printf.sprintf " %s" (IntSetS.to_string v))
-       all_defs_map);
 
-  (* So set is the locations of the defintions *)
-  old
+  List.iter
+    (fun (id, block) ->
+      Format.fprintf f "%s @[<v>%a @] @." (annot id)
+      print_block block)
+    g.blocks
 
-module type DFA_GRAPH = sig
-  module NodeS : SetS
-
-  type node = NodeS.elt
-  type fact
-
-  (* Abstract type of datflow graphs *)
-  type t
-
-  val preds : t -> node -> NodeS.t
-  val succs : t -> node -> NodeS.t
-  val nodes : t -> NodeS.t
-
-  (* the flow function:
-       given a graph node and input fact, compute the resulting fact on the 
-       output edge of the node                                                *)
-  val flow : t -> node -> fact -> fact
-  val find_fact : t -> node -> fact
-  val add_fact : node -> fact -> t -> t
-  val to_string : t -> string
-  val pp : Format.formatter -> t -> unit
-end
-
-module type Fact = sig
-  type t
-
-  (* Join operation *)
-  val combine : t list -> t
-  val compare : t -> t -> int
-  val to_string : t -> string
-end
+let printer : Format.formatter -> cfg -> unit = printer_annot (fun _ -> "\n")
 
 module type AS_GRAPH_PARAMS = sig
   type t
@@ -558,76 +447,116 @@ module type AS_GRAPH_PARAMS = sig
   val combine : t list -> t
   val to_string : t -> string
   val forwards : bool
-  val flow : cfg -> lbl -> t -> t
+
+  (* int is the label for the basic block in the cfg *)
+  val flow : cfg -> int -> t -> t
 end
 
-module AsGraph (D : AS_GRAPH_PARAMS) : sig
-  include DFA_GRAPH with type fact := D.t and module NodeS = IntSetS
+open Data_structures
 
-  val of_cfg : (node -> D.t) -> D.t -> cfg -> t
+module AsGraph (D : AS_GRAPH_PARAMS) : sig
+  include Solver.DFA_GRAPH with type fact := D.t and module NodeS = IntSetS
+
+  val of_cfg : (node -> D.t) -> cfg -> t
+
+  (* Compute the In fact for a given Node
+     Our DFA only stores the Out facts *)
   val find_fact_in : t -> node -> D.t
   val dfa : t -> D.t IdMap.t
 end = struct
   module NodeS = IntSetS
 
   (* Initial mapping of facts to labels
-a cpmstamt f;pw om value for entry and exit *)
+     a cpmstamt f;pw om value for entry and exit *)
   type t = { cfg : cfg; (* DFA has the flow values *) dfa : D.t IdMap.t }
   type node = int
 
   let of_cfg init cfg =
-    let dfa = cfg.blocks |> IdMap.mapi (fun l _ -> init l) in
+    let nodes = cfg.blocks |> List.map fst in
+    let dfa =
+      List.fold_left (fun acc l -> IdMap.add l (init l) acc) IdMap.empty nodes
+    in
     { cfg; dfa }
+
+  let nodes g = g.dfa |> IdMap.bindings |> List.map fst |> NodeS.of_list
+
+  let preds g n =
+    let block = List.assoc n g.cfg.blocks in
+    NodeS.of_list block.preds
+
+  let succs g n =
+    let block = List.assoc n g.cfg.blocks in
+    NodeS.of_list block.succs
 
   let add_fact n d g = { g with dfa = IdMap.add n d g.dfa }
   let find_fact g n = IdMap.find n g.dfa
   let dfa g = g.dfa
+  let flow g n f = D.flow g.cfg n f
 
   (* Computes the IN for a node in the grap *)
   let find_fact_in g n =
     let preds = NodeS.elements @@ preds g n in
     let d_outs = List.map (find_fact g) preds in
-    d_outs
+    D.combine d_outs
 
-  (* Printing functions *)
-  let to_string g =
-    to_string_annot (fun l -> D.to_string (find_fact g l) ^ "\n") g.cfg
-
-  let printer f g =
-    printer_annot (fun l -> D.to_string (find_fact g l) ^ "\n") f g.cfg
+  let pp f g =
+    printer_annot (fun l -> Format.sprintf "%d: %s@," l (D.to_string (find_fact g l))) f g.cfg
 end
 
-module BlockMap = Map.Make (Int)
-
 (* We track out of each block here as facts*)
-type defs_per_block = IdSet.t BlockMap.t
+(* type defs_per_block = IdSet.t BlockMap.t *)
 
-let optimize cfg =
-  let defS = all_defs cfg in
-  print_endline (IdSet.to_string defS)
-(* Abstract Fact essentially a lattice *)
+(* let optimize cfg =
+   let defS = all_defs cfg in
+   print_endline (IdSet.to_string defS) *)
 
 (* Dataflow helpers *)
 (* fi is the flow function for instructions
    bb is the basic block we want to flow through
    d_in is the current dataflow facts on the In edge
    Returns the resulting Out/In fact *)
-(* let block_flow_forwards (fi : instruction -> 'd -> 'd) bb (d_in : 'd) : 'd =
-  List.fold_left (fun d i -> fi i d) d_in bb.instructions
+let block_flow_forwards (fi : instruction -> 'd -> 'd) bb (d_in : 'd) : 'd =
+  let _, instrs = List.split bb.lab_instructions in
+  List.fold_left (fun d i -> fi i d) d_in instrs
 
-let block_flow_forwards (fi : instruction -> 'd -> 'd) bb (d_out : 'd) : 'd =
-  List.fold_right (fun i d -> fi i d) bb.instructions d_out *)
+let block_flow_backwards (fi : instruction -> 'd -> 'd) bb (d_out : 'd) : 'd =
+  let _, instrs = List.split bb.lab_instructions in
+  List.fold_right (fun i d -> fi i d) instrs d_out
 
 (* Need to recover facts inside basic blocks *)
 
 (* Constructs a map for each instruction (given by some id) to the corresponding
-dataflow fact *)
-(* let block_flow_forwards_map (fi : instruction -> 'd -> 'd) bb (d_in : 'd) = () *)
-(* let block_flow_backwards_map (fi : instruction -> 'd -> 'd) bb (d_out : 'd) = () *)
+   dataflow fact *)
+(* let block_flow_forwards_map (fi : instruction -> 'd -> 'd) bb (d_in : 'd) = ()
+   let block_flow_backwards_map (fi : instruction -> 'd -> 'd) bb (d_out : 'd) = () *)
 
 (* Map1 Block ids to In and out facts of block
-  Map2 Block Id * 100 to number instructions inside that block and their facts
-  This is block_flow_forwards_map
+   Map2 Block Id * 100 to number instructions inside that block and their facts
+   This is block_flow_forwards_map
 *)
 
-(* Use def chain and def use chan *)
+(* Try to create a simple graph with fake flow functions *)
+
+module Fact = struct
+  let forwards = true
+  let flow _g _l d = d
+
+  (* the lattice ---------------------------------------------------------- *)
+  type t = IntSetS.t
+
+  let combine ds = List.fold_left IntSetS.union IntSetS.empty ds
+  let equal = IntSetS.equal
+  let compare = IntSetS.compare
+  let to_string = IntSetS.to_string
+end
+
+(* instantiate the general framework ---------------------------------------- *)
+module Graph = AsGraph (Fact)
+module Solver = Solver.Make (Fact) (Graph)
+
+
+let analyze (cfg:cfg) : unit =
+  let init _l = IntSetS.empty in
+  let g = Graph.of_cfg init cfg in
+  let f = Format.formatter_of_out_channel stdout in
+  Graph.pp f g

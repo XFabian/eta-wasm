@@ -11,7 +11,9 @@
   lexer
   parser
   unique_ids
+  data_structures
   cfg
+  solver
   ; sexp_printer
   symbols
   types
