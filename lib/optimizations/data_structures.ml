@@ -1,5 +1,3 @@
-
-
 (** Comparable, printable type *)
 module type OrdPrintT = sig
   type t
@@ -28,8 +26,6 @@ module MakeSet (Ord : OrdPrintT) : SetS with type elt = Ord.t = struct
   let string_of_elt = Ord.to_string
   let pp f t = Format.pp_print_string f (to_string t)
 end
-
-
 
 (** Extended maps *)
 module type MapS = sig
@@ -98,9 +94,16 @@ module IntSetS = MakeSet (struct
 end)
 
 (* TODO: Not sure if needed to have this id *)
-  module IdSet = MakeSet (struct
-type t = int * string
+module IdVarSet = MakeSet (struct
+  type t = int * string
 
-let compare = compare
-let to_string (i, s) = string_of_int i ^ ": " ^ s
+  let compare = compare
+  let to_string (i, s) = "(" ^ string_of_int i ^ ", " ^ s ^ ")"
+end)
+
+module IdVarMap = MakeMap (struct
+  type t = int * string
+
+  let compare = compare
+  let to_string (i, s) = "(" ^ string_of_int i ^ ", " ^ s ^ ")"
 end)

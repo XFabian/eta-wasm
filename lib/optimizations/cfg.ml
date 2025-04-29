@@ -333,94 +333,46 @@ let write_dot_file filename contents =
    out n facts that hold at exit of n
    Good slides: https://groups.seas.harvard.edu/courses/cs153/2019fa/lectures/Lec20-Dataflow-analysis.pdf
 *)
+let extract_var = function
+  | Var v -> Some v
+  | _ -> None
 
-(* let extract_var = function
-     | Var v -> Some v
-     | _ -> None
+let uses ((n, instr) : int * instruction) : (int * string) list =
+  let add_opt l v =
+    match extract_var v with
+    | Some x -> l @ [ (n, x) ]
+    | None -> l
+  in
+  let add_list ls vs = List.fold_left add_opt ls vs in
+  match instr with
+  | Return vals -> add_list [] vals
+  | Unary { src; _ } -> add_opt [] src
+  | Binary { src1; src2; _ } -> add_opt (add_opt [] src1) src2
+  | Copy { src; _ } -> add_opt [] src
+  | Load { src_ptr; _ } -> add_opt [] src_ptr
+  | Store { src; _ } -> add_opt [] src
+  | FCall { args; _ } -> add_list [] args
+  | BrIf { cond; _ } -> add_opt [] cond
+  | Br _
+  | Block _
+  | Loop _ ->
+      [] (* uses would be handled recursively if needed *)
 
-   let uses ((n, instr) : int * instruction) : IdSet.t =
-     let add_opt set v =
-       match extract_var v with
-       | Some x -> IdSet.add (n, x) set
-       | None -> set
-     in
-     let add_list set vs = List.fold_left add_opt set vs in
-     match instr with
-     | Return vals -> add_list IdSet.empty vals
-     | Unary { src; _ } -> add_opt IdSet.empty src
-     | Binary { src1; src2; _ } -> add_opt (add_opt IdSet.empty src1) src2
-     | Copy { src; _ } -> add_opt IdSet.empty src
-     | Load { src_ptr; _ } -> add_opt IdSet.empty src_ptr
-     | Store { src; _ } -> add_opt IdSet.empty src
-     | FCall { args; _ } -> add_list IdSet.empty args
-     | BrIf { cond; _ } -> add_opt IdSet.empty cond
-     | Br _
-     | Block _
-     | Loop _ ->
-         IdSet.empty (* uses would be handled recursively if needed *)
-
-   let def_of_instr (instr : instruction) : string option =
-     match instr with
-     | Unary { dst; _ }
-     | Binary { dst; _ }
-     | Copy { dst; _ }
-     | Load { dst; _ }
-     | FCall { dst = Some dst; _ } -> (
-         match dst with
-         | Var v -> Some v
-         | _ -> None)
-     | Store { dst_ptr : value; _ } -> (
-         match dst_ptr with
-         | Var v -> Some v
-         | _ -> None)
-     | _ -> None
-
-   (* Data facts In and then union with gen *)
-   let gen (n, i) d =
-     let g =
-       match def_of_instr i with
-       | Some v -> IdSet.singleton (n, v)
-       | None -> IdSet.empty
-     in
-     IdSet.union d g
-
-   let gen_map (n, instr) m =
-     match def_of_instr instr with
-     | Some v ->
-         ( VarMap.update_or (IntSetS.singleton n)
-             (fun old_val -> IntSetS.add n old_val)
-             v m,
-           n + 1 )
-     | None -> (m, n + 1) *)
-
-(* n is block id 
- * 100 gives space for 100 different isntructoins in this block *)
-(* let map_block n bb d_in =
-   fst
-     (List.fold_left
-        (fun (m, c) i -> gen_map (c, i) m)
-        (d_in, n * 100)
-        bb.instructions) *)
-
-(* Transfer function for a block *)
-(* let reach_block n bb (d_in : 'd) : 'd =
-     List.fold_left (fun d i -> gen (n, i) d) d_in bb.instructions
-
-   let all_defs cfg =
-     let blocks = cfg.blocks in
-     let old =
-       List.fold_left (fun d (i, b) -> reach_block i b d) IdSet.empty blocks
-     in
-     let all_defs_map =
-       List.fold_left (fun d (i, b) -> map_block i b d) VarMap.empty blocks
-     in
-     print_endline
-       (VarMap.to_string
-          (fun _ v -> Printf.sprintf " %s" (IntSetS.to_string v))
-          all_defs_map);
-
-     (* So set is the locations of the defintions *)
-     old *)
+let def_of_instr (instr : instruction) : string option =
+  match instr with
+  | Unary { dst; _ }
+  | Binary { dst; _ }
+  | Copy { dst; _ }
+  | Load { dst; _ }
+  | FCall { dst = Some dst; _ } -> (
+      match dst with
+      | Var v -> Some v
+      | _ -> None)
+  | Store { dst_ptr : value; _ } -> (
+      match dst_ptr with
+      | Var v -> Some v
+      | _ -> None)
+  | _ -> None
 
 module type AS_GRAPH_PARAMS = sig
   type t
@@ -447,6 +399,7 @@ module AsGraph (D : AS_GRAPH_PARAMS) : sig
   val id_in : t -> node -> int -> D.t
   val id_out : t -> node -> int -> D.t
   val dfa : t -> D.t IdMap.t
+  val blocks : t -> basic_block list
 end = struct
   module NodeS = IntSetS
 
@@ -464,6 +417,7 @@ end = struct
 
   let nodes g = g.dfa |> IdMap.bindings |> List.map fst |> NodeS.of_list
   let block g n = List.assoc n g.cfg.blocks
+  let blocks g = g.cfg.blocks |> List.split |> snd
 
   let preds g n =
     let block = List.assoc n g.cfg.blocks in

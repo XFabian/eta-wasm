@@ -2,4 +2,6 @@ constpr () {
     a : int = 4
     b : int = 2 + 4
     c : int = b 
+    b = 4
+    d : int = b
 }
