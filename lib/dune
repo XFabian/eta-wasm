@@ -13,6 +13,7 @@
   unique_ids
   data_structures
   cfg
+  reaching
   solver
   ; sexp_printer
   symbols

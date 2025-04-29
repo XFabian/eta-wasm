@@ -27,7 +27,8 @@ module type DFA_GRAPH = sig
      given a graph node and input fact, compute the resulting fact on the
       output edge of the node *)
   val flow : t -> node -> fact -> fact
-  val find_fact : t -> node -> fact
+  (* Out fact of the block *)
+  val out : t -> node -> fact
   val add_fact : node -> fact -> t -> t
   (* val to_string : t -> string *)
   val pp : Format.formatter -> t -> unit
@@ -40,9 +41,9 @@ module Make (Fact : FACT) (Graph : DFA_GRAPH with type fact := Fact.t) = struct
     | true -> g
     | false ->
         let node = Graph.NodeS.choose workset in
-        let node_fact = Graph.find_fact g node in
+        let node_fact = Graph.out g node in
         let pre_nodes = Graph.NodeS.elements (Graph.preds g node) in
-        let in_facts = List.map (fun n -> Graph.find_fact g n) pre_nodes in
+        let in_facts = List.map (fun n -> Graph.out g n) pre_nodes in
         let cmb_fact = Fact.combine in_facts in
         let out_fact = Graph.flow g node cmb_fact in
         let new_workset = Graph.NodeS.remove node workset in

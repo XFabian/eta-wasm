@@ -489,18 +489,25 @@ end = struct
     NodeS.of_list block.succs
 
   let add_fact n d g = { g with dfa = IdMap.add n d g.dfa }
-  let find_fact g n = IdMap.find n g.dfa
+  let out g n = IdMap.find n g.dfa
   let dfa g = g.dfa
+
+
+
   let flow g n f = D.flow g.cfg n f
+  let block_in = ()
+
+  let block_out = ()
+
 
   (* Computes the IN for a node in the grap *)
   let find_fact_in g n =
     let preds = NodeS.elements @@ preds g n in
-    let d_outs = List.map (find_fact g) preds in
+    let d_outs = List.map (out g) preds in
     D.combine d_outs
 
   let pp f g =
-    printer_annot (fun l -> Format.sprintf "%d: %s@," l (D.to_string (find_fact g l))) f g.cfg
+    printer_annot (fun l -> Format.sprintf "%d: %s@," l (D.to_string (out g l))) f g.cfg
 end
 
 (* We track out of each block here as facts*)
@@ -515,9 +522,9 @@ end
    bb is the basic block we want to flow through
    d_in is the current dataflow facts on the In edge
    Returns the resulting Out/In fact *)
-let block_flow_forwards (fi : instruction -> 'd -> 'd) bb (d_in : 'd) : 'd =
-  let _, instrs = List.split bb.lab_instructions in
-  List.fold_left (fun d i -> fi i d) d_in instrs
+let block_flow_forwards (fi : int * instruction -> 'd -> 'd) bb (d_in : 'd) : 'd =
+  (* let _, instrs = List.split bb.lab_instructions in *)
+  List.fold_left (fun d i -> fi i d) d_in bb.lab_instructions
 
 let block_flow_backwards (fi : instruction -> 'd -> 'd) bb (d_out : 'd) : 'd =
   let _, instrs = List.split bb.lab_instructions in
