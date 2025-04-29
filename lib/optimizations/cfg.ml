@@ -422,25 +422,6 @@ let write_dot_file filename contents =
      (* So set is the locations of the defintions *)
      old *)
 
-let printer_annot (annot : int -> string) (f : Format.formatter) (g : cfg) :
-    unit =
-  let open Format in
-  let print_block f' block =
-    List.iter
-      (fun (i, instr) ->
-        fprintf f' "%d: %a@," i
-        Wtac_print.pp_instruction instr)
-      block.lab_instructions
-  in
-
-  List.iter
-    (fun (id, block) ->
-      Format.fprintf f "%s @[<v>%a @] @." (annot id)
-      print_block block)
-    g.blocks
-
-let printer : Format.formatter -> cfg -> unit = printer_annot (fun _ -> "\n")
-
 module type AS_GRAPH_PARAMS = sig
   type t
 
@@ -449,7 +430,7 @@ module type AS_GRAPH_PARAMS = sig
   val forwards : bool
 
   (* int is the label for the basic block in the cfg *)
-  val flow : cfg -> int -> t -> t
+  val insn_flow : int * instruction -> t -> t
 end
 
 open Data_structures
@@ -461,7 +442,10 @@ module AsGraph (D : AS_GRAPH_PARAMS) : sig
 
   (* Compute the In fact for a given Node
      Our DFA only stores the Out facts *)
-  val find_fact_in : t -> node -> D.t
+  val block_in : t -> node -> D.t
+  val block_out : t -> node -> D.t
+  val id_in : t -> node -> int -> D.t
+  val id_out : t -> node -> int -> D.t
   val dfa : t -> D.t IdMap.t
 end = struct
   module NodeS = IntSetS
@@ -479,74 +463,133 @@ end = struct
     { cfg; dfa }
 
   let nodes g = g.dfa |> IdMap.bindings |> List.map fst |> NodeS.of_list
+  let block g n = List.assoc n g.cfg.blocks
 
   let preds g n =
     let block = List.assoc n g.cfg.blocks in
-    NodeS.of_list block.preds
+    if D.forwards then NodeS.of_list block.preds else NodeS.of_list block.succs
 
   let succs g n =
     let block = List.assoc n g.cfg.blocks in
-    NodeS.of_list block.succs
+    if D.forwards then NodeS.of_list block.succs else NodeS.of_list block.preds
 
   let add_fact n d g = { g with dfa = IdMap.add n d g.dfa }
   let out g n = IdMap.find n g.dfa
   let dfa g = g.dfa
 
-
-
-  let flow g n f = D.flow g.cfg n f
-  let block_in = ()
-
-  let block_out = ()
-
-
-  (* Computes the IN for a node in the grap *)
-  let find_fact_in g n =
-    let preds = NodeS.elements @@ preds g n in
-    let d_outs = List.map (out g) preds in
-    D.combine d_outs
-
-  let pp f g =
-    printer_annot (fun l -> Format.sprintf "%d: %s@," l (D.to_string (out g l))) f g.cfg
-end
-
-(* We track out of each block here as facts*)
-(* type defs_per_block = IdSet.t BlockMap.t *)
-
-(* let optimize cfg =
-   let defS = all_defs cfg in
-   print_endline (IdSet.to_string defS) *)
-
-(* Dataflow helpers *)
-(* fi is the flow function for instructions
+  (* Dataflow helpers *)
+  (*
    bb is the basic block we want to flow through
    d_in is the current dataflow facts on the In edge
    Returns the resulting Out/In fact *)
-let block_flow_forwards (fi : int * instruction -> 'd -> 'd) bb (d_in : 'd) : 'd =
-  (* let _, instrs = List.split bb.lab_instructions in *)
-  List.fold_left (fun d i -> fi i d) d_in bb.lab_instructions
+  let block_flow_forwards bb (d_in : 'd) : 'd =
+    (* let _, instrs = List.split bb.lab_instructions in *)
+    List.fold_left (fun d i -> D.insn_flow i d) d_in bb.lab_instructions
 
-let block_flow_backwards (fi : instruction -> 'd -> 'd) bb (d_out : 'd) : 'd =
-  let _, instrs = List.split bb.lab_instructions in
-  List.fold_right (fun i d -> fi i d) instrs d_out
+  let block_flow_backwards bb (d_out : 'd) : 'd =
+    List.fold_right (fun i d -> D.insn_flow i d) bb.lab_instructions d_out
 
-(* Need to recover facts inside basic blocks *)
+  let flow_block g n f =
+    (if D.forwards then block_flow_forwards else block_flow_backwards)
+      (block g n) f
 
-(* Constructs a map for each instruction (given by some id) to the corresponding
-   dataflow fact *)
-(* let block_flow_forwards_map (fi : instruction -> 'd -> 'd) bb (d_in : 'd) = ()
-   let block_flow_backwards_map (fi : instruction -> 'd -> 'd) bb (d_out : 'd) = () *)
+  let flow g n f = flow_block g n f
 
-(* Map1 Block ids to In and out facts of block
-   Map2 Block Id * 100 to number instructions inside that block and their facts
-   This is block_flow_forwards_map
-*)
+  (* Computes IN[n] for each instruction in a block given IN for the first instruction
+   *)
+  let in_forwards_map bb d_in : int -> 'd =
+    let m, _ =
+      List.fold_left
+        (fun (m, f) (i, instr) ->
+          let fact = D.insn_flow (i, instr) f in
+          (IdMap.add i f m, fact))
+        (IdMap.empty, d_in) bb.lab_instructions
+    in
+    fun i -> IdMap.find i m
 
-(* Try to create a simple graph with fake flow functions *)
+  (* Compupte Out[n] for each instruction given IN of the first instruction *)
+  let out_forwards_map bb d_in : int -> 'd =
+    let m, _ =
+      List.fold_left
+        (fun (m, f) (i, instr) ->
+          let fact_out = D.insn_flow (i, instr) f in
+          (IdMap.add i fact_out m, fact_out))
+        (IdMap.empty, d_in) bb.lab_instructions
+    in
+    fun i -> IdMap.find i m
+
+  (* Compute IN[n] for each isntruction in a block, given Out of the block *)
+  let in_backwards_map bb d_in : int -> 'd =
+    let m, _ =
+      List.fold_right
+        (fun (i, instr) (m, f) ->
+          let fact_in = D.insn_flow (i, instr) f in
+          (IdMap.add i fact_in m, fact_in))
+        bb.lab_instructions (IdMap.empty, d_in)
+    in
+    fun i -> IdMap.find i m
+
+  (* Compute Out[n] for each isntruction in a block, given Out of the block *)
+  let out_backwards_map bb d_in : int -> 'd =
+    let m, _ =
+      List.fold_right
+        (fun (i, instr) (m, f) ->
+          let fact_in = D.insn_flow (i, instr) f in
+          (IdMap.add i f m, fact_in))
+        bb.lab_instructions (IdMap.empty, d_in)
+    in
+    fun i -> IdMap.find i m
+
+  (* Compupte the In for a node in the graph *)
+  let block_in g n =
+    if D.forwards then
+      let preds = NodeS.elements @@ preds g n in
+      let d_outs = List.map (out g) preds in
+      D.combine d_outs
+    else out g n
+
+  let block_out g n =
+    if D.forwards then out g n
+    else
+      let preds = NodeS.elements @@ preds g n in
+      let d_outs = List.map (out g) preds in
+      D.combine d_outs
+
+  (* Computes the IN[n] for each isntruction in the basic block *)
+  let id_in g n =
+    if D.forwards then in_forwards_map (block g n) (block_in g n)
+    else in_backwards_map (block g n) (block_out g n)
+
+  let id_out g n =
+    if D.forwards then out_forwards_map (block g n) (block_in g n)
+    else out_backwards_map (block g n) (block_out g n)
+
+  let printer_annot (annot : int -> string) (f : Format.formatter) (g : t) :
+      unit =
+    let open Format in
+    let print_block f' block =
+      List.iter
+        (fun (i, instr) ->
+          fprintf f' "IN[%d] : %s @, %a@, OUT[%d] : %s @,@," i
+            (D.to_string (id_in g block.id i))
+            Wtac_print.pp_instruction instr i
+            (D.to_string (id_out g block.id i)))
+        block.lab_instructions
+    in
+    List.iter
+      (fun (id, block) ->
+        Format.fprintf f "%s @[<v>%a @] @." (annot id) print_block block)
+      g.cfg.blocks
+
+  let pp f g =
+    printer_annot
+      (fun l -> Format.sprintf "OUT[%d]: %s@," l (D.to_string (out g l)))
+      f g
+end
 
 module Fact = struct
   let forwards = true
-  let flow _g _l d = d
+  let insn_flow _g d = d
 
   (* the lattice ---------------------------------------------------------- *)
   type t = IntSetS.t
@@ -561,8 +604,7 @@ end
 module Graph = AsGraph (Fact)
 module Solver = Solver.Make (Fact) (Graph)
 
-
-let analyze (cfg:cfg) : unit =
+let analyze (cfg : cfg) : unit =
   let init _l = IntSetS.empty in
   let g = Graph.of_cfg init cfg in
   let f = Format.formatter_of_out_channel stdout in
