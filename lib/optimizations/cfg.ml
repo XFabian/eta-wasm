@@ -222,6 +222,8 @@ let make_cfg (Wtac.Program decls) =
     decls
   |> List.map cfg_helper
 
+(* Given an instruction id returns the block that instruction resides in *)
+let block_id_from_id id = id / 1000
 (* let cfg_to_fn cfg =
    (* Remove main and exit *)
    let _, blocks = cfg.blocks |> List.split
@@ -248,12 +250,6 @@ let make_cfg (Wtac.Program decls) =
 
    Wtac_print.pp_top_level formatter;
    close_out chan *)
-
-let compute_dominator = ()
-let compute_dominator_tree = ()
-
-(* Probably related to strongly connected componetns *)
-let compute_natural_loops = ()
 
 let pp_basic_block fmt (block : basic_block) =
   let open Format in
@@ -400,6 +396,7 @@ module AsGraph (D : AS_GRAPH_PARAMS) : sig
   val id_out : t -> node -> int -> D.t
   val dfa : t -> D.t IdMap.t
   val blocks : t -> basic_block list
+  val lookup_instr : t -> int -> instruction
 end = struct
   module NodeS = IntSetS
 
@@ -418,6 +415,13 @@ end = struct
   let nodes g = g.dfa |> IdMap.bindings |> List.map fst |> NodeS.of_list
   let block g n = List.assoc n g.cfg.blocks
   let blocks g = g.cfg.blocks |> List.split |> snd
+
+  (* Get the instruciton with that id*)
+  let lookup_instr g id =
+    let block_id = id / 1000 in
+    let block = block g block_id in
+    let _, instr = List.find (fun (i, _) -> i = id) block.lab_instructions in
+    instr
 
   let preds g n =
     let block = List.assoc n g.cfg.blocks in
@@ -447,7 +451,9 @@ end = struct
     (if D.forwards then block_flow_forwards else block_flow_backwards)
       (block g n) f
 
-  let flow g n f = flow_block g n f
+  (* May need something for exit as well
+    But entry for forwards works *)
+  let flow g n f = if Int.compare n 0 = 0 then out g n else flow_block g n f
 
   (* Computes IN[n] for each instruction in a block given IN for the first instruction
    *)

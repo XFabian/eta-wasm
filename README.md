@@ -14,18 +14,26 @@ An implementation of malloc can be linked
 - use another eta compiler and compare. Alos use their tests and integrate them
 - use cram tests with wasmer to execute the wat files generated
 
+- Extend mem to take an additional offset as argument to ease offset computations
+- clean up Wtac generation
+
 - Use LLMs to generate .eta files that are valid and use them as a test suite for the parser. Instruct he LLM to output 0 if the code is correct and something else if not.
 For example that the correct branch is executed.
 
 
+
+How can I test the performance?
+In wasmer? or profile Rust with the wasmer call
 ## Optimizations
 - [ ] Define stuff like Constant folding for example
 - [ ] Define a Dataflow analysis 
 - [ ] Define Dominator and
+- [ ] Delete unused functions
 
 
 
-
+## Not working
+Underscores emission
 
 
 MINUS VAR LBRACK VAR LBRACK INT RBRACK RBRACK
