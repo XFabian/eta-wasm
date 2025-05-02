@@ -50,7 +50,7 @@ module Fact = struct
   let to_string = VarMap.to_string (fun _ v -> IntSetS.to_string v)
 end
 
-module Graph = AsGraph (Fact)
+module Graph = AsGraph (Fact)(Cfg.CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* Now build the Use- def chains
@@ -72,13 +72,13 @@ let get_use_def g (use_id, var) block_id instr_id ud_map =
       IdVarMap.add (use_id, var) entry ud_map
 
 let make_use_def (g : Graph.t) =
-  let reach_defs_block use_defs (block : Cfg.basic_block) =
+  let reach_defs_block use_defs (block : Cfg.BLOCK.t) =
     List.fold_left
       (fun acc_m (i, instr) ->
         let uses = Cfg.uses (i, instr) in
         (* Uses is a list *)
-        List.fold_left (fun m use -> get_use_def g use block.id i m) acc_m uses)
-      use_defs block.lab_instructions
+        List.fold_left (fun m use -> get_use_def g use (Cfg.BLOCK.id block) i m) acc_m uses)
+      use_defs (Cfg.BLOCK.lab_instructions block)
   in
   List.fold_left
     (fun acc block -> reach_defs_block acc block)
@@ -111,8 +111,8 @@ let extract_constant_defs lab_instructions cur_map =
 
 let get_constants g =
   List.fold_left
-    (fun acc (b : Cfg.basic_block) ->
-      extract_constant_defs b.lab_instructions acc)
+    (fun acc (b : Cfg.BLOCK.t) ->
+      extract_constant_defs (Cfg.BLOCK.lab_instructions b) acc)
     IdMap.empty (Graph.blocks g)
 
 let rewrite_instr i instr lookup_f =
@@ -158,13 +158,13 @@ let constant_prop g ud_map const_map =
   (* Fold over all uses  *)
   let new_blocks =
     List.map
-      (fun (b : Cfg.basic_block) ->
+      (fun (b : Cfg.BLOCK.t) ->
         let new_instructions =
           List.map
             (fun (i, instr) -> (i, rewrite_instr i instr lookup))
-            b.lab_instructions
+            (Cfg.BLOCK.lab_instructions b)
         in
-        (b.id, { b with lab_instructions = new_instructions }))
+        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions ))
       (Graph.blocks g)
   in
   new_blocks
@@ -239,18 +239,18 @@ let copy_prop g cp_map =
   in
   let new_blocks =
     List.map
-      (fun (b : Cfg.basic_block) ->
+      (fun (b : Cfg.BLOCK.t) ->
         let new_instructions =
           List.map
             (fun (i, instr) -> (i, rewrite_instr i instr lookup))
-            b.lab_instructions
+            (Cfg.BLOCK.lab_instructions b)
         in
-        (b.id, { b with lab_instructions = new_instructions }))
+        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions ))
       (Graph.blocks g)
   in
   new_blocks
 
-let analyze (cfg : Cfg.cfg) : unit =
+let analyze (cfg : Cfg.CFG.t) : unit =
   let init _l = VarMap.empty in
   let g = Graph.of_cfg init cfg in
   let f = Format.formatter_of_out_channel stdout in
@@ -271,7 +271,7 @@ let analyze (cfg : Cfg.cfg) : unit =
   Printf.printf "%s\n"
     (IdMap.to_string (fun _ v -> Wtac.show_value v) constant_map);
   let new_blocks = constant_prop g ud_map constant_map in
-  let new_cfg : Cfg.cfg = { label = "blub"; blocks = new_blocks } in
+  let new_cfg = Cfg.CFG.make new_blocks "blub" in
   let opt_g = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g;
   Printf.printf "Copy Propagation Map \n";
@@ -282,7 +282,7 @@ let analyze (cfg : Cfg.cfg) : unit =
   Printf.printf "After copy propagation";
   let solved_g' = Solver.solve opt_g in
   let copy_blocks = copy_prop solved_g' copy_map in
-  let new_cfg : Cfg.cfg = { label = "blub"; blocks = copy_blocks } in
+  let new_cfg = Cfg.CFG.make copy_blocks "blub" in
   Cfg.print_cfg "optimized.dot" new_cfg;
   let opt_g' = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g'

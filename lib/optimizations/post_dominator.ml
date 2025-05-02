@@ -28,7 +28,7 @@ module Fact = struct
   let to_string = IntSetS.to_string
 end
 
-module Graph = AsGraph (Fact)
+module Graph = AsGraph (Fact)(Cfg.CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* The immediate Post dominator is the node d in pdom(n)\ n such that
@@ -79,8 +79,8 @@ let write_pdom_tree filename dom_tree =
   pp_pdom_tree chan dom_tree;
   close_out dom_file
 
-let analyze (cfg : Cfg.cfg) : unit =
-  let block_ids, _ = List.split cfg.blocks in
+let analyze (cfg : Cfg.CFG.t) : unit =
+  let block_ids, _ = Cfg.CFG.blocks cfg |> List.split in
   (*  Get Id of exit node *)
   let exit_id = block_ids |> List.hd in
   let set_all_ids = IntSetS.of_list block_ids in
