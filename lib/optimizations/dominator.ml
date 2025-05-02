@@ -32,7 +32,8 @@ module Fact = struct
   let to_string = IntSetS.to_string
 end
 
-module Graph = AsGraph (Fact)(Cfg.CFG)
+module CFG  = Cfg.CFG
+module Graph = AsGraph (Fact)(CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* The root is the entry node
@@ -111,16 +112,16 @@ let write_dom_tree filename dom_tree =
 
 let get_back_edges g =
   List.fold_left
-    (fun acc (block : Cfg.CFG.block) ->
+    (fun acc (block : CFG.block) ->
       (* Check if successor dominates this block
          Then it is a backwards edge *)
       let back_edges_n =
         List.fold_left
           (fun inner_acc dst_edge ->
-            let dom_n = Graph.block_out g (Cfg.CFG.block_id block) in
-            if IntSetS.mem dst_edge dom_n then ((Cfg.CFG.block_id block), dst_edge) :: inner_acc
+            let dom_n = Graph.block_out g (CFG.block_id block) in
+            if IntSetS.mem dst_edge dom_n then ((CFG.block_id block), dst_edge) :: inner_acc
             else inner_acc)
-          [] (Cfg.CFG.succs (Graph.cfg g) (Cfg.CFG.block_id block))
+          [] (CFG.succs (Graph.cfg g) (CFG.block_id block))
       in
       back_edges_n @ acc)
     [] (Graph.blocks g)
@@ -153,8 +154,8 @@ let compute_natural_loops g =
       List.iter (fun (b : Cfg.BLOCK.t) -> Printf.printf "%d" (Cfg.BLOCK.id b)) blocks)
     loops
 
-let analyze (cfg : Cfg.CFG.t) : unit =
-  let block_ids, _ = List.split (Cfg.CFG.blocks cfg) in
+let analyze (cfg : CFG.t) : unit =
+  let block_ids, _ = List.split (CFG.blocks cfg) in
   let set_all_ids = IntSetS.of_list block_ids in
   let init l = if l = 0 then IntSetS.singleton 0 else set_all_ids in
   let g = Graph.of_cfg init cfg in
@@ -179,14 +180,14 @@ let analyze (cfg : Cfg.CFG.t) : unit =
 
 
 (* Returns an initial dataflow graph *)
-let init (cfg: Cfg.CFG.t) : Graph.t = 
-  let block_ids, _ = List.split (Cfg.CFG.blocks cfg) in
+let init (cfg: CFG.t) : Graph.t = 
+  let block_ids, _ = List.split (CFG.blocks cfg) in
   let set_all_ids = IntSetS.of_list block_ids in
   let init l = if l = 0 then IntSetS.singleton 0 else set_all_ids in
   Graph.of_cfg init cfg
 
 
-let gen_debug fname (cfg: Cfg.CFG.t) = 
+let gen_debug fname (cfg: CFG.t) = 
   let g = init cfg in 
   let solved_g = Solver.solve g in
   let idom_map = immediate_doms solved_g in

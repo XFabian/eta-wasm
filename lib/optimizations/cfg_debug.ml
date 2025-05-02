@@ -17,7 +17,7 @@ let run_command cmd args =
 let perm = 0o755
 let create_newdir path perm =
   if not (Sys.file_exists path) then Sys.mkdir path perm
-let gen_debug_info filename cfg = 
+let gen_debug_info filename cfg= 
   
   let file_dir = Filename.dirname filename in
   let f_name = Filename.basename filename |> Filename.chop_extension in
@@ -28,7 +28,7 @@ let gen_debug_info filename cfg =
   create_newdir dirname perm;
   (* Change into that folder *)
   Sys.chdir dirname;
-  Cfg.print_cfg cfg_name cfg;
+  Cfg.CFG.print_cfg cfg_name cfg;
   Dominator.gen_debug dom_name cfg;
   run_command "dot" ["-Tpng"; cfg_name; "-o"; Filename.chop_extension cfg_name ^ ".png"];
   run_command "dot" ["-Tpng"; dom_name; "-o"; Filename.chop_extension dom_name ^ ".png"];

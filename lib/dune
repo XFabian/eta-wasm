@@ -18,6 +18,7 @@
   dominator
   post_dominator
   cfg_debug
+  cfg_to_code
   liveness
   solver
   ; sexp_printer

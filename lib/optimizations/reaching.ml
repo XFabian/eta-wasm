@@ -283,7 +283,7 @@ let analyze (cfg : Cfg.CFG.t) : unit =
   let solved_g' = Solver.solve opt_g in
   let copy_blocks = copy_prop solved_g' copy_map in
   let new_cfg = Cfg.CFG.make copy_blocks "blub" in
-  Cfg.print_cfg "optimized.dot" new_cfg;
+  Cfg.CFG.print_cfg "optimized.dot" new_cfg;
   let opt_g' = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g'
 
