@@ -16,6 +16,7 @@
   reaching
   dominator
   post_dominator
+  cfg_debug
   liveness
   solver
   ; sexp_printer

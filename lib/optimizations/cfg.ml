@@ -396,6 +396,7 @@ module AsGraph (D : AS_GRAPH_PARAMS) : sig
   val id_out : t -> node -> int -> D.t
   val dfa : t -> D.t IdMap.t
   val blocks : t -> basic_block list
+  val block : t -> int -> basic_block
   val lookup_instr : t -> int -> instruction
 end = struct
   module NodeS = IntSetS
@@ -453,10 +454,13 @@ end = struct
       (block g n) f
 
   (* Entry and exit nodes are special cases since they do not
-  have any instructions in them *)
+  have any instructions in them 
+  In forwards analyis we need to ignore entry node flows
+  In backwards that of exit, othersie they are not correctly updated
+  For their flows. Information is not correctly propagated otherwise*)
   let flow g n f =
-    if Int.compare n 0 = 0 then out g n
-    else if Int.compare n (exit_id g) = 0 then out g n
+    if D.forwards && Int.compare n 0 = 0 then out g n
+    else if not D.forwards && Int.compare n (exit_id g) = 0 then out g n
     else flow_block g n f
 
   (* Computes IN[n] for each instruction in a block given IN for the first instruction
@@ -573,3 +577,5 @@ let analyze (cfg : cfg) : unit =
   let g = Graph.of_cfg init cfg in
   let f = Format.formatter_of_out_channel stdout in
   Graph.pp f g
+
+

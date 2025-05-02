@@ -67,7 +67,8 @@ let compile stage src =
       Cfg.print_cfg "cfg_test.dot" cfg_fun1;
       (* Cfg.analyze cfg_fun1; *)
       (* Dominator.analyze cfg_fun1; *)
-      Post_dominator.analyze cfg_fun1;
+      Cfg_debug.gen_debug_info src cfg_fun1;
+      (* Post_dominator.analyze cfg_fun1; *)
       (* Reaching.analyze cfg_fun1; *)
       (* Cfg.optimize cfg_fun1; *)
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac

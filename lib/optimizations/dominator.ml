@@ -48,14 +48,17 @@ module Solver = Solver.Make (Fact) (Graph)
    So d does not dominate any other node
 *)
 (* Takes a solved dfg with domiantors *)
+(* TODO I somewhat think that this calculation is incorrect
+   But somehow it works
+   The forall check will always be true I think but maybe not *)
 let immediate_doms g =
   let block_ids = Graph.dfa g |> IdMap.bindings |> List.map fst in
   (* TODO: This does not remove entry. No worng. bindings sorts the list! *)
   let block_ids_no_entry = List.tl block_ids in
   List.fold_left
     (fun acc id ->
-      let strict_dom = IntSetS.remove id (Graph.block_out g id) in
-      Printf.printf "Strict Dom: %s\n" (IntSetS.to_string strict_dom);
+      let strict_dom = IntSetS.remove id (Graph.out g id) in
+      (* Printf.printf "Strict Dom: %s\n" (IntSetS.to_string strict_dom); *)
       let is_idom d =
         let dom_d = Graph.block_out g d in
         let strict_dom_no_d = IntSetS.remove d strict_dom in
@@ -91,13 +94,63 @@ let pp_dom_tree fmt idom_tree =
       List.iter (fun v -> Format.fprintf fmt "%d -> %d @\n" n v) children)
     idom_tree;
   Format.fprintf fmt "}@."
-  (* Format.pp_print_newline fmt () Flush *)
+(* Format.pp_print_newline fmt () Flush *)
 
 let write_dom_tree filename dom_tree =
   let dom_file = open_out filename in
   let chan = Format.formatter_of_out_channel dom_file in
   pp_dom_tree chan dom_tree;
   close_out dom_file
+
+(* Natural loop  is defined by a back edge
+   A control flow ecge B -> H where H dominates B
+   Then : H Is the loop Header
+   All nodes that reach B without going through H are the body of the loop
+*)
+
+let get_back_edges g =
+  List.fold_left
+    (fun acc (block : Cfg.basic_block) ->
+      (* Check if successor dominates this block
+         Then it is a backwards edge *)
+      let back_edges_n =
+        List.fold_left
+          (fun inner_acc dst_edge ->
+            let dom_n = Graph.block_out g block.id in
+            if IntSetS.mem dst_edge dom_n then (block.id, dst_edge) :: inner_acc
+            else inner_acc)
+          [] block.succs
+      in
+      back_edges_n @ acc)
+    [] (Graph.blocks g)
+
+
+(* Each loop consists of pairsof header and its body
+These are basic blocks  *)
+let compute_natural_loops g =
+  let b_edges = get_back_edges g in
+  let rec loop_body header body_p =
+    if body_p = header then []
+    else
+      let block = Graph.block g body_p in
+      List.fold_left
+        (fun acc pred -> acc @ loop_body header pred)
+        [ block ] block.preds
+  in
+  let loops =
+    List.map
+      (fun (loop_exit, loop_header) -> 
+        let header_block = Graph.block g loop_header in
+        header_block, loop_body loop_header loop_exit)
+      b_edges
+  in
+  (* let open Cfg in *)
+  List.iter
+    (fun (header, blocks : Cfg.basic_block * 'a) -> 
+      Printf.printf "Header of Loop: %d\n" header.id;
+      Printf.printf "Body of the Loop: ";
+      List.iter (fun (b : Cfg.basic_block) -> Printf.printf "%d" b.id) blocks)
+    loops
 
 let analyze (cfg : Cfg.cfg) : unit =
   let block_ids, _ = List.split cfg.blocks in
@@ -117,19 +170,27 @@ let analyze (cfg : Cfg.cfg) : unit =
        (fun _ v ->
          List.fold_left (fun acc t -> acc ^ Printf.sprintf " %d," t) "" v)
        idom_tree);
-  write_dom_tree "dom_test.dot" idom_tree
-
-(* Now compute the real tree from that map
-   So the Idoms are the parents of the nodes Print this to dot
-   Keys are the values and the values are all children of that node
-*)
+  write_dom_tree "dom_test.dot" idom_tree;
+  let b_edges = get_back_edges solved_g in
+  List.iter (fun p -> Printf.printf "%d -> %d\n " (fst p) (snd p)) b_edges;
+  compute_natural_loops solved_g
 (* Printf.printf "%s" (IntSetS.to_string (Graph.out solved_g 0)) *)
 
-(* Probably related to strongly connected componetns *)
-let compute_natural_loops = ()
 
-(* TODO: Post dominators is backwards flow analysis
-   Useful to find the join points of an if for example
-*)
+(* Returns an initial dataflow graph *)
+let init (cfg: Cfg.cfg) : Graph.t = 
+  let block_ids, _ = List.split cfg.blocks in
+  let set_all_ids = IntSetS.of_list block_ids in
+  let init l = if l = 0 then IntSetS.singleton 0 else set_all_ids in
+  Graph.of_cfg init cfg
+
+
+let gen_debug fname (cfg: Cfg.cfg) = 
+  let g = init cfg in 
+  let solved_g = Solver.solve g in
+  let idom_map = immediate_doms solved_g in
+  let idom_tree = dominator_tree idom_map in
+  (* let loops = compute_natural_loops solved_g in *)
+  write_dom_tree fname idom_tree
 
 (* Also dominance frontier *)
