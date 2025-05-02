@@ -142,7 +142,7 @@ let constant_prop g ud_map const_map =
     match IdVarMap.find_opt (i, var) ud_map with
     | None -> None
     | Some defs ->
-        let list_defs = IntSetS.to_list defs in
+        let list_defs = defs |> IntSetS.to_seq |> List.of_seq in
         let start_val = IdMap.find_opt (List.hd list_defs) const_map in
         List.fold_left
           (fun acc def ->
@@ -196,7 +196,7 @@ TODO: Not sure with Mem as src*)
 let copy_prop_map g ud_map =
   IdVarMap.fold
     (fun (use_id, var) defs acc ->
-      let defs_list = IntSetS.to_list defs in
+      let defs_list = defs |> IntSetS.to_seq |> List.of_seq in
       match defs_list with
       | [ def_id ] -> (
           match Graph.lookup_instr g def_id with

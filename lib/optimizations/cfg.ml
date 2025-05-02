@@ -415,6 +415,7 @@ end = struct
   let nodes g = g.dfa |> IdMap.bindings |> List.map fst |> NodeS.of_list
   let block g n = List.assoc n g.cfg.blocks
   let blocks g = g.cfg.blocks |> List.split |> snd
+  let exit_id g = g.cfg.blocks |> List.hd |> fst
 
   (* Get the instruciton with that id*)
   let lookup_instr g id =
@@ -451,9 +452,12 @@ end = struct
     (if D.forwards then block_flow_forwards else block_flow_backwards)
       (block g n) f
 
-  (* May need something for exit as well
-    But entry for forwards works *)
-  let flow g n f = if Int.compare n 0 = 0 then out g n else flow_block g n f
+  (* Entry and exit nodes are special cases since they do not
+  have any instructions in them *)
+  let flow g n f =
+    if Int.compare n 0 = 0 then out g n
+    else if Int.compare n (exit_id g) = 0 then out g n
+    else flow_block g n f
 
   (* Computes IN[n] for each instruction in a block given IN for the first instruction
    *)
@@ -543,7 +547,7 @@ end = struct
 
   let pp f g =
     printer_annot
-      (fun l -> Format.sprintf "OUT[%d]: %s@," l (D.to_string (out g l)))
+      (fun l -> Format.sprintf "OUT[%d]: %s@," l (D.to_string (block_out g l)))
       f g
 end
 
