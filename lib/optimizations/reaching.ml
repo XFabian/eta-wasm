@@ -2,6 +2,7 @@
 
 *)
 open Data_structures
+open Dataflow
 open Wtac
 
 type fact = IntSetS.t VarMap.t
@@ -49,7 +50,7 @@ module Fact = struct
   let to_string = VarMap.to_string (fun _ v -> IntSetS.to_string v)
 end
 
-module Graph = Cfg.AsGraph (Fact)
+module Graph = AsGraph (Fact)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* Now build the Use- def chains

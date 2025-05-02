@@ -4,7 +4,7 @@
 *)
 
 open Data_structures
-
+open Dataflow
 (* Maps block ids to the ids that dominate it *)
 type fact = IntSetS.t
 
@@ -28,7 +28,7 @@ module Fact = struct
   let to_string = IntSetS.to_string
 end
 
-module Graph = Cfg.AsGraph (Fact)
+module Graph = AsGraph (Fact)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* The immediate Post dominator is the node d in pdom(n)\ n such that
