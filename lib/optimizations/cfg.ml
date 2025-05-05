@@ -48,8 +48,13 @@ module BLOCK : BLOCKT = struct
     { id; lab_instructions; preds; succs }
 
   let update_instr b instr = { b with lab_instructions = instr }
-  let update_succs b n = b.succs <- n :: b.succs
-  let update_preds b n = b.preds <- n :: b.preds
+
+  let update_succs b n =
+    (* We do not want duplicates. This actually should be a set *)
+    if List.mem n b.succs then () else b.succs <- n :: b.succs
+
+  let update_preds b n =
+    if List.mem n b.preds then () else b.preds <- n :: b.preds
 
   let pp fmt (block : t) =
     let open Format in
@@ -78,7 +83,6 @@ module type CFGT = sig
   type block
 
   val blocks : t -> (int * block) list
-
   val get_block : t -> int -> block
   val fn_name : t -> string
   val fn_params : t -> string list
@@ -102,6 +106,9 @@ module type CFGT = sig
   val of_function : top_level -> t
   val get_entry : t -> int
   val get_exit : t -> int
+
+  val update_blocks :
+    t -> ((int * Wtac.instruction) list -> (int * Wtac.instruction) list) -> t
 end
 
 let is_terminator = function
@@ -140,7 +147,6 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
 
   let blocks cfg = cfg.blocks
   let get_block cfg n = List.assoc n cfg.blocks
-
   let fn_name cfg = cfg.fn_name
   let fn_params cfg = cfg.fn_params
   let fn_type cfg = cfg.fn_type
@@ -149,6 +155,16 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
   let preds cfg n = List.assoc n cfg.blocks |> B.preds
   let l_instrs b = B.lab_instructions b
   let block_id b = B.id b
+
+  let update_blocks g f =
+    let new_blocks =
+      List.map
+        (fun ((l, bl) : int * block) ->
+          let new_instrs = f (B.lab_instructions bl) in
+          (l, B.update_instr bl new_instrs))
+        g.blocks
+    in
+    { g with blocks = new_blocks }
 
   let new_empty_block instr =
     let id = make_id () in
@@ -197,8 +213,15 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
           (* Kept loop here for better reconstruction *)
           let next_bl = List.assoc (B.id b + 1) blocks in
           add_edge b next_bl
+      | Return _ ->
+          (* Get exit node which is at the start right now.
+          Be careful when reversing the blocks somewhere before!*)
+          let exit = blocks |> List.hd |> snd in
+          (* Printf.printf "Adding return edges %d -> %d\n" (B.id b) (B.id exit); *)
+          add_edge b exit
       | _ -> ()
     in
+    (* TODO: Not needed I think *)
     (* Remove exit block from list very ugly hack
        relies on the counter *)
     let blocks_no_exit = List.remove_assoc (!id_counter - 1) blocks in
@@ -276,30 +299,34 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
           failwith "Failed Cfg Construction: Did not handle all isntructions"
         else
           let exit = make_exit () in
-          let chan = Format.formatter_of_out_channel stdout in
+          (* let chan = Format.formatter_of_out_channel stdout in *)
           (* let print_helper ls_i =
                List.iter (fun i -> Format.fprintf chan "%a\n" Wtac_print.pp_instruction i) ls_i
              in *)
           (* List.iteri (fun i ls -> Format.fprintf chan "Basic block %d:@," i ; print_helper ls) blocks.instructions; *)
-          let print_symbols ls =
-            List.iter (fun (k, v) -> Printf.fprintf stdout "%s: %d\n" k v) ls
-          in
-          print_symbols (Hashtbl.to_seq resolver_map |> List.of_seq);
+          (* let print_symbols ls =
+               List.iter (fun (k, v) -> Printf.fprintf stdout "%s: %d\n" k v) ls
+             in *)
+          (* print_symbols (Hashtbl.to_seq resolver_map |> List.of_seq); *)
           (* Now need to add successor edges to the graph *)
-          Format.pp_print_flush chan ();
+          (* Format.pp_print_flush chan (); *)
           (* TODO should clear resolver map after each function *)
           let all_blocks = (entry :: blocks) @ [ exit ] in
-          print_endline "Computing edges";
+          (* print_endline "Computing edges"; *)
           (* Entry edge since blocks can be empty link to exit *)
           add_edge entry (List.hd (blocks @ [ exit ]));
+
+          (* Last block ot exit *)
           add_edge (List.hd (List.rev (entry :: blocks))) exit;
+          (* Reverses the list *)
           let cfg_blocks =
             List.fold_left
               (fun acc b -> (B.id b, b) :: acc)
               [] (blocks @ [ exit ])
           in
           add_edges cfg_blocks;
-          (* Dumb but works for now. Compute list again now with entry and exit *)
+          (* Dumb but works for now. Compute list again now with entry and exit 
+          Reverses list*)
           let all_cfg_blocks =
             List.fold_left (fun acc b -> (B.id b, b) :: acc) [] all_blocks
           in

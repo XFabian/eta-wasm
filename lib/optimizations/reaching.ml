@@ -50,12 +50,12 @@ module Fact = struct
   let to_string = VarMap.to_string (fun _ v -> IntSetS.to_string v)
 end
 
-module Graph = AsGraph (Fact)(Cfg.CFG)
+module Graph = AsGraph (Fact) (Cfg.CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
 (* Now build the Use- def chains
-That is a data structure
-Use of a variable and all defintions D of that variable that can reach that use *)
+   That is a data structure
+   Use of a variable and all defintions D of that variable that can reach that use *)
 
 (* Maps use_id, name -> definitions that can reach it *)
 type use_def_map = IntSetS.t IdVarMap.t
@@ -63,7 +63,7 @@ type use_def_map = IntSetS.t IdVarMap.t
 let get_use_def g (use_id, var) block_id instr_id ud_map =
   let reaching_defs = Graph.id_in g block_id instr_id in
   (* Globals are funky here like __stack_pinter
-  They can be used before they are defined *)
+     They can be used before they are defined *)
   match VarMap.find_opt var reaching_defs with
   | None -> ud_map
   | Some entry ->
@@ -77,8 +77,11 @@ let make_use_def (g : Graph.t) =
       (fun acc_m (i, instr) ->
         let uses = Cfg.uses (i, instr) in
         (* Uses is a list *)
-        List.fold_left (fun m use -> get_use_def g use (Cfg.BLOCK.id block) i m) acc_m uses)
-      use_defs (Cfg.BLOCK.lab_instructions block)
+        List.fold_left
+          (fun m use -> get_use_def g use (Cfg.BLOCK.id block) i m)
+          acc_m uses)
+      use_defs
+      (Cfg.BLOCK.lab_instructions block)
   in
   List.fold_left
     (fun acc block -> reach_defs_block acc block)
@@ -97,9 +100,9 @@ let invert_use_def (ud_map : use_def_map) =
         defs du_map)
     ud_map IdMap.empty
 
-(* TODO The constants should return a map with the use of the variable that is a 
-  constant, so really a substitution map
-  Similar to Copy Propagation *)
+(* TODO The constants should return a map with the use of the variable that is a
+   constant, so really a substitution map
+   Similar to Copy Propagation *)
 (* Is not a set and does not add multiple ones for If for example *)
 let extract_constant_defs lab_instructions cur_map =
   List.fold_left
@@ -138,8 +141,7 @@ let rewrite_instr i instr lookup_f =
   | _ -> instr
 
 let constant_prop g ud_map const_map =
-  let lookup =
-   fun i var ->
+  let lookup i var =
     match IdVarMap.find_opt (i, var) ud_map with
     | None -> None
     | Some defs ->
@@ -164,36 +166,35 @@ let constant_prop g ud_map const_map =
             (fun (i, instr) -> (i, rewrite_instr i instr lookup))
             (Cfg.BLOCK.lab_instructions b)
         in
-        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions ))
+        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions))
       (Graph.blocks g)
   in
   new_blocks
 
-(* My rewrite pass takes such a map as input and applies it to each isntruction 
-    
+(* My rewrite pass takes such a map as input and applies it to each isntruction
+
     Get uses at each instruction.
     Look up in use def map to get definitions
     If these defintions are constant and have the same value then
       replace that use (variable) with that Constant
-    *)
+*)
 
 (* Copy Propagation
     1. Check the uses of a variable
      Use Def map.
-     Check the definition 
-    2. Now inbetween that value cannot be reassigned 
+     Check the definition
+    2. Now inbetween that value cannot be reassigned
     x := y
     y := 5
-    z := x + 1 
+    z := x + 1
     It is unsafe to copy propagate x
     So check in the reaching defintions
     that all variables used in the original value are not reassigned in between!
-
-    *)
+*)
 
 (* TODO Globals should be make available in the entry node! *)
-(* Marks which instructions need to be rewritten 
-TODO: Not sure with Mem as src*)
+(* Marks which instructions need to be rewritten
+   TODO: Not sure with Mem as src*)
 let copy_prop_map g ud_map =
   IdVarMap.fold
     (fun (use_id, var) defs acc ->
@@ -218,10 +219,10 @@ let copy_prop_map g ud_map =
                   VarMap.find_opt src_name rd_at_def )
               with
               | Some src_use, Some src_def ->
-                  (* If the reaching definitons at the use are a subset of the 
-                    defintions at defintion then it is not assigned in between
-                    Otherwise the reaching defintions at use would have an entry
-                    that would not exist *)
+                  (* If the reaching definitons at the use are a subset of the
+                     defintions at defintion then it is not assigned in between
+                     Otherwise the reaching defintions at use would have an entry
+                     that would not exist *)
                   if IntSetS.subset src_use src_def then
                     IdMap.add use_id (var, s) acc
                   else acc
@@ -231,8 +232,7 @@ let copy_prop_map g ud_map =
     ud_map IdMap.empty
 
 let copy_prop g cp_map =
-  let lookup =
-   fun i var ->
+  let lookup i var =
     match IdMap.find_opt i cp_map with
     | None -> None
     | Some (old_var, new_val) -> if var = old_var then Some new_val else None
@@ -245,7 +245,7 @@ let copy_prop g cp_map =
             (fun (i, instr) -> (i, rewrite_instr i instr lookup))
             (Cfg.BLOCK.lab_instructions b)
         in
-        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions ))
+        (Cfg.BLOCK.id b, Cfg.BLOCK.update_instr b new_instructions))
       (Graph.blocks g)
   in
   new_blocks
@@ -282,19 +282,19 @@ let analyze (cfg : Cfg.CFG.t) : unit =
   Printf.printf "After copy propagation";
   let solved_g' = Solver.solve opt_g in
   let copy_blocks = copy_prop solved_g' copy_map in
-  let new_cfg = Cfg.CFG.make copy_blocks "blub"  [] Wtac.I32 []in
+  let new_cfg = Cfg.CFG.make copy_blocks "blub" [] Wtac.I32 [] in
   Cfg.CFG.print_cfg "optimized.dot" new_cfg;
   let opt_g' = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g'
 
 (* So these analysis return a map with a location and a substitution map from
-  string to value implemented as pairs.
-  These are then used in rewrite_instr
-  
-  Now I would like to apply them in a loop*)
+   string to value implemented as pairs.
+   These are then used in rewrite_instr
+
+   Now I would like to apply them in a loop*)
 
 (* Statically evaluates expressions when possible
-  Also does some algebraic simplifications like x + 0 = x *)
+   Also does some algebraic simplifications like x + 0 = x *)
 
 let convert_bool = Bool.to_int
 
@@ -339,3 +339,8 @@ let constant_fold_instr instr =
   | Binary { op = Mult; src1; src2 = Imm (1, _); dst; t } ->
       Copy { src = src1; dst; t }
   | _ as i -> i
+
+let constant_fold_block (lab_bl : (int * instruction) list) =
+  List.map (fun (i, instrs) -> (i, constant_fold_instr instrs)) lab_bl
+
+let run_constant_fold (g : Cfg.CFG.t) = Cfg.CFG.update_blocks g constant_fold_block

@@ -55,8 +55,12 @@ module Solver = Solver.Make (Fact) (Graph)
    The forall check will always be true I think but maybe not *)
 let immediate_doms g =
   let block_ids = Graph.dfa g |> IdMap.bindings |> List.map fst in
-  (* TODO: This does not remove entry. No worng. bindings sorts the list! *)
-  let block_ids_no_entry = List.tl block_ids in
+  (* This does not remove entry. No worng. bindings sorts the list! *)
+  (* See KEEP_cfg_funcfg2.png There can be multiple entries *)
+  let block_ids_no_entry = List.filter (fun i -> let preds = CFG.preds (Graph.cfg g) i in
+                                      List.length preds > 0
+  ) block_ids in
+  List.iter (fun i -> Printf.printf "%d " i) block_ids_no_entry;
   List.fold_left
     (fun acc id ->
       let strict_dom = IntSetS.remove id (Graph.out g id) in
@@ -72,7 +76,8 @@ let immediate_doms g =
       in
       match List.find_opt is_idom (IntSetS.elements strict_dom) with
       | Some idom -> IdMap.add id idom acc
-      | None -> failwith "No immediate dominator found")
+      | None ->
+        failwith "No immediate dominator found")
     IdMap.empty block_ids_no_entry
 
 (* Idom map consists key = node and values are the nodes dominating the key
