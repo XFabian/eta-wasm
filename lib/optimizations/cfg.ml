@@ -78,16 +78,30 @@ module type CFGT = sig
   type block
 
   val blocks : t -> (int * block) list
-  val name : t -> string
-  val make : (int * block) list -> string -> t
+
+  val get_block : t -> int -> block
+  val fn_name : t -> string
+  val fn_params : t -> string list
+  val fn_type : t -> Wtac.wtac_type
+  val fn_locals : t -> Wtac.obj list
+
+  val make :
+    (int * block) list ->
+    string ->
+    string list ->
+    Wtac.wtac_type ->
+    Wtac.obj list ->
+    t
 
   val create_cfg : Wtac.program -> t list
   val succs : t -> int -> int list
   val preds : t -> int -> int list
   val l_instrs : block -> (int * Wtac.instruction) list
   val block_id : block -> int
-
   val print_cfg : string -> t -> unit
+  val of_function : top_level -> t
+  val get_entry : t -> int
+  val get_exit : t -> int
 end
 
 let is_terminator = function
@@ -113,14 +127,24 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
     (* store basic blocks in association list, indexed by block # *)
     blocks : (int * B.t) list;
     (* Function name for example *)
-    label : string;
+    fn_name : string;
+    fn_params : string list;
+    fn_type : Wtac.wtac_type;
+    fn_locals : Wtac.obj list;
   }
 
   type block = B.t
 
-  let make blocks label = { blocks; label }
+  let make blocks fn_name fn_params fn_type fn_locals =
+    { blocks; fn_name; fn_params; fn_type; fn_locals }
+
   let blocks cfg = cfg.blocks
-  let name cfg = cfg.label
+  let get_block cfg n = List.assoc n cfg.blocks
+
+  let fn_name cfg = cfg.fn_name
+  let fn_params cfg = cfg.fn_params
+  let fn_type cfg = cfg.fn_type
+  let fn_locals cfg = cfg.fn_locals
   let succs cfg n = List.assoc n cfg.blocks |> B.succs
   let preds cfg n = List.assoc n cfg.blocks |> B.preds
   let l_instrs b = B.lab_instructions b
@@ -141,6 +165,13 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
   let add_edge from to_ =
     B.update_succs from (B.id to_);
     B.update_preds to_ (B.id from)
+
+  let get_entry _cfg = 0
+
+  (* Exit is the last block added to the cfg *)
+  let get_exit cfg =
+    let id, _ = List.hd cfg.blocks in
+    id
 
   (* Very ugly hack
      We need to add the binding for exit here so if there is no return
@@ -175,14 +206,14 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
 
   (* Accumulate instructions until you find a terminator *)
   (* Returns a basic block and the rest of instructions
-  let rec create_basic_block acc instrs : block * instruction list =
-    match instrs with
-    | [] ->
-        (* Finished we create exit block
-           Cheated a little we need to add a terminator bu this needs be ignored*)
-        (new_empty_block [], [])
-    | i :: is when is_terminator i -> (new_empty_block (acc @ [ i ]), is)
-    | i :: is -> create_basic_block (acc @ [ i ]) is *)
+     let rec create_basic_block acc instrs : block * instruction list =
+       match instrs with
+       | [] ->
+           (* Finished we create exit block
+              Cheated a little we need to add a terminator bu this needs be ignored*)
+           (new_empty_block [], [])
+       | i :: is when is_terminator i -> (new_empty_block (acc @ [ i ]), is)
+       | i :: is -> create_basic_block (acc @ [ i ]) is *)
 
   (* When I go int o a block I need to look into these instructions *)
   let rec split_into_basic_blocks l_stack instrs =
@@ -273,11 +304,20 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
             List.fold_left (fun acc b -> (B.id b, b) :: acc) [] all_blocks
           in
           id_counter := 0;
-          make all_cfg_blocks fn.name
+          make all_cfg_blocks fn.name fn.params fn.f_type fn.locals
         (* { blocks = all_cfg_blocks; label = fn.name } *)
     | Data _ ->
         (* Globals are ignored for now*)
         failwith "Internal Error: Data not possible after filter"
+
+  (* TODO Should ony be function *)
+  let of_function decl =
+    match decl with
+    | Wtac.Function _ as f -> cfg_helper f
+    | Wtac.Data _ ->
+        failwith
+          "Internal Error: This function should only be \n\
+          \    called with function declarations"
 
   let create_cfg (Wtac.Program decls) =
     List.filter
@@ -288,20 +328,29 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
       decls
     |> List.map cfg_helper
 
-    let pp fmt (blocks : (int * B.t) list) =
-      let open Format in
-      fprintf fmt "digraph CFG {\n";
-      fprintf fmt "  node [shape=box fontname=\"monospace\"];\n";
-      List.iter (fun (_id, block) -> B.pp fmt block) blocks;
-      fprintf fmt "}\n"
-    
-    let print_cfg f_name cfg =
-      let oc = open_out f_name in
-      let fmt = Format.formatter_of_out_channel oc in
-      pp fmt cfg.blocks;
-      close_out oc
+  let pp fmt (blocks : (int * B.t) list) =
+    let open Format in
+    fprintf fmt "digraph CFG {\n";
+    fprintf fmt "  node [shape=box fontname=\"monospace\"];\n";
+    List.iter (fun (_id, block) -> B.pp fmt block) blocks;
+    fprintf fmt "}\n"
+
+  let print_cfg f_name cfg =
+    let oc = open_out f_name in
+    let fmt = Format.formatter_of_out_channel oc in
+    pp fmt cfg.blocks;
+    close_out oc
+
+  (* Reconstruct given cfg using dominator info provided as argument *)
+  (* let reconstruct (g : Solver.DFA_GRAPH.t) =
+     g *)
 end
 
+(* TODO: Put block in a seperate file and make CFGT not dependent on some
+   abstract block but on that specific one
+   Also for ASGraph specify the block type there like in this Make functor
+   Also call it CFG helper
+*)
 module CFG = Make (BLOCK)
 
 (* int is the basic block they target *)
@@ -352,50 +401,49 @@ let block_id_from_id id = id / 1000
    Wtac_print.pp_top_level formatter;
    close_out chan *)
 
+(*
+   let cfg_to_dot cfg =
+     let buffer = Buffer.create 1024 in
+     Buffer.add_string buffer "digraph cfg {\n";
+     Buffer.add_string buffer
+       (Printf.sprintf
+          "subgraph \"test \" {]n style=\"dashed\";\n\n\
+          \  color=\"black\";\n\n\
+          \  label=\"Not working\";\n\n\
+          \  fn_0_basic_block_0 \
+           [shape=Mdiamond,style=filled,fillcolor=white,label=\"ENTRY\"];\n\n\n\n\
+           \tfn_0_basic_block_1 \
+           [shape=Mdiamond,style=filled,fillcolor=white,label=\"EXIT\"];\n\
+          \  ");
+     List.iter
+       (fun (id, block) ->
+         let label =
+           match BLOCK.lab_instructions block with
+           | [] -> Printf.sprintf "Block %d" id
+           | (i, x) :: xs ->
+               Printf.sprintf "Block %d: \n %s" id
+                 (* This gets the exit block *)
+                 (show_instruction (snd (List.hd (List.rev ((i, x) :: xs)))))
+         in
+         Buffer.add_string buffer
+           (Printf.sprintf "%d [shape=record,label=\"%s \"];\n" id label))
+       (CFG.blocks cfg);
+     (* All edges *)
+     (* List.iter
+        (fun edge ->
+          Buffer.add_string buffer (Printf.sprintf "%d -> %d " edge.src edge.dst);
+          (match edge.label with
+          | None -> ()
+          | Some n -> Buffer.add_string buffer (Printf.sprintf " [label=\"%s\"]" n));
+          Buffer.add_string buffer "\n")
+        cfg.edges; *)
+     Buffer.add_string buffer "}\n";
+     Buffer.contents buffer
 
-(* 
-let cfg_to_dot cfg =
-  let buffer = Buffer.create 1024 in
-  Buffer.add_string buffer "digraph cfg {\n";
-  Buffer.add_string buffer
-    (Printf.sprintf
-       "subgraph \"test \" {]n style=\"dashed\";\n\n\
-       \  color=\"black\";\n\n\
-       \  label=\"Not working\";\n\n\
-       \  fn_0_basic_block_0 \
-        [shape=Mdiamond,style=filled,fillcolor=white,label=\"ENTRY\"];\n\n\n\n\
-        \tfn_0_basic_block_1 \
-        [shape=Mdiamond,style=filled,fillcolor=white,label=\"EXIT\"];\n\
-       \  ");
-  List.iter
-    (fun (id, block) ->
-      let label =
-        match BLOCK.lab_instructions block with
-        | [] -> Printf.sprintf "Block %d" id
-        | (i, x) :: xs ->
-            Printf.sprintf "Block %d: \n %s" id
-              (* This gets the exit block *)
-              (show_instruction (snd (List.hd (List.rev ((i, x) :: xs)))))
-      in
-      Buffer.add_string buffer
-        (Printf.sprintf "%d [shape=record,label=\"%s \"];\n" id label))
-    (CFG.blocks cfg);
-  (* All edges *)
-  (* List.iter
-     (fun edge ->
-       Buffer.add_string buffer (Printf.sprintf "%d -> %d " edge.src edge.dst);
-       (match edge.label with
-       | None -> ()
-       | Some n -> Buffer.add_string buffer (Printf.sprintf " [label=\"%s\"]" n));
-       Buffer.add_string buffer "\n")
-     cfg.edges; *)
-  Buffer.add_string buffer "}\n";
-  Buffer.contents buffer
-
-let write_dot_file filename contents =
-  let oc = open_out filename in
-  output_string oc contents;
-  close_out oc *)
+   let write_dot_file filename contents =
+     let oc = open_out filename in
+     output_string oc contents;
+     close_out oc *)
 
 (* Define use and def for statement
    uses: Sets of variables used by s

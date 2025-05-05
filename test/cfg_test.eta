@@ -1,6 +1,7 @@
 function() {
     a :int = 3
     b : int = 4
+    d : int = a + 2
     if a < b {
         c : int = 5
         a = c
@@ -13,7 +14,6 @@ function() {
     while a < b {
         a = a + 1
     }
-
     return 
 }
 
@@ -32,5 +32,19 @@ function2() {
         
         }
     }
+    return
+}
+
+function3() {
+    if true {
+        a : int = 1
+    }
+    else {
+        b:int =6
+        if false {
+            c:int = 5
+        }
+    }
+    f:int = 89
     return
 }

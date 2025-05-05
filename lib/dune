@@ -21,6 +21,7 @@
   cfg_to_code
   liveness
   solver
+  optimizer
   ; sexp_printer
   symbols
   types

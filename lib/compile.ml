@@ -63,11 +63,13 @@ let compile stage src =
       (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in
       let cfg = Cfg.CFG.create_cfg wtac in
-      let cfg_fun1 = List.hd (List.tl cfg) in
-      Cfg.CFG.print_cfg "cfg_test.dot" cfg_fun1;
+      let cfg_fun3 = List.hd (cfg|> List.tl |> List.tl |> List.tl) in
+      Cfg.CFG.print_cfg "cfg_test_comp1.dot" cfg_fun3;
+      let opt_wtac = Optimizer.optimize wtac in
+      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac;
       (* Cfg.analyze cfg_fun1; *)
       (* Dominator.analyze cfg_fun1; *)
-      Cfg_debug.gen_debug_info src cfg_fun1;
+      (* Cfg_debug.gen_debug_info src cfg_fun1; *)
       (* Post_dominator.analyze cfg_fun1; *)
       (* Reaching.analyze cfg_fun1; *)
       (* Cfg.optimize cfg_fun1; *)

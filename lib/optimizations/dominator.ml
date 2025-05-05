@@ -147,36 +147,20 @@ let compute_natural_loops g =
       b_edges
   in
   (* let open Cfg in *)
-  List.iter
+  (* List.iter
     (fun (header, blocks : Cfg.BLOCK.t * 'a) -> 
       Printf.printf "Header of Loop: %d\n"(Cfg.BLOCK.id header);
       Printf.printf "Body of the Loop: ";
       List.iter (fun (b : Cfg.BLOCK.t) -> Printf.printf "%d" (Cfg.BLOCK.id b)) blocks)
+    loops; *)
     loops
 
-let analyze (cfg : CFG.t) : unit =
+let analyze (cfg : CFG.t) : Graph.t =
   let block_ids, _ = List.split (CFG.blocks cfg) in
   let set_all_ids = IntSetS.of_list block_ids in
   let init l = if l = 0 then IntSetS.singleton 0 else set_all_ids in
-  let g = Graph.of_cfg init cfg in
-  let f = Format.formatter_of_out_channel stdout in
-  (* Graph.pp f g; *)
-  (* Graph.pp f g; *)
-  let solved_g = Solver.solve g in
-  Graph.pp f solved_g;
-  let idom_map = immediate_doms solved_g in
-  Printf.printf "%s\n" (IdMap.to_string (fun _ v -> Int.to_string v) idom_map);
-  let idom_tree = dominator_tree idom_map in
-  Printf.printf "%s\n"
-    (IdMap.to_string
-       (fun _ v ->
-         List.fold_left (fun acc t -> acc ^ Printf.sprintf " %d," t) "" v)
-       idom_tree);
-  write_dom_tree "dom_test.dot" idom_tree;
-  let b_edges = get_back_edges solved_g in
-  List.iter (fun p -> Printf.printf "%d -> %d\n " (fst p) (snd p)) b_edges;
-  compute_natural_loops solved_g
-(* Printf.printf "%s" (IntSetS.to_string (Graph.out solved_g 0)) *)
+  let g = Graph.of_cfg init cfg in 
+  Solver.solve g
 
 
 (* Returns an initial dataflow graph *)
@@ -191,8 +175,19 @@ let gen_debug fname (cfg: CFG.t) =
   let g = init cfg in 
   let solved_g = Solver.solve g in
   let idom_map = immediate_doms solved_g in
+  let f = Format.formatter_of_out_channel stdout in
+
+  Printf.printf "%s\n" (IdMap.to_string (fun _ v -> Int.to_string v) idom_map);
+
   let idom_tree = dominator_tree idom_map in
+  Printf.printf "%s\n"
+  (IdMap.to_string
+     (fun _ v ->
+       List.fold_left (fun acc t -> acc ^ Printf.sprintf " %d," t) "" v)
+     idom_tree);
   (* let loops = compute_natural_loops solved_g in *)
-  write_dom_tree fname idom_tree
+  write_dom_tree fname idom_tree;
+  Graph.pp f solved_g;
+
 
 (* Also dominance frontier *)
