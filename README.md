@@ -20,6 +20,12 @@ An implementation of malloc can be linked
 - Use LLMs to generate .eta files that are valid and use them as a test suite for the parser. Instruct he LLM to output 0 if the code is correct and something else if not.
 For example that the correct branch is executed.
 
+## Tricky CFG
+See cfg_early_return.eta for a tricky CFG
+Reconstructing that is tricky because the postdominator of the if Header is the exit node which is wrong. So everything after the if
+will be put into one of the branches.
+
+Also how are expectoins handled in a CFG?
 
 
 How can I test the performance?
