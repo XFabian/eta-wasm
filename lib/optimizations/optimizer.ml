@@ -227,7 +227,9 @@ let pass _n (g : CFG.t) =
   Function arguments can contain pointers that are written to. So they have a side
   effect. So we cannot remove them
   *)
-  dce g
+  (* For stack pointer stuff I need copy propagation
+  and constant propagation *)
+  dce g |> dce |> dce |> dce |> dce
 
 (* List of all globals
 TODO: Restrict to globals used in the function that is optimized *)

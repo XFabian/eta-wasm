@@ -21,6 +21,7 @@ let string_to_int_arr s =
 %token TINT TBOOL
 %token RETURN IF ELSE WHILE
 %token BANG BAR AND
+%token RECORD DOT
 %token EOF
 
 %nonassoc EQUAL
@@ -54,6 +55,7 @@ prog :
 declarations: 
     | func = func_decl {FunDecl func}
     | var = var_decl {Global var}
+    | rec_d = rec_decl {RecordDecl rec_d}
     ;
 func_decl:
     | name = VAR; LPAREN; params_and_types=params ; RPAREN; ret_type_opt = option(COLON ts= separated_list(COMMA, type_spec) {ts});
@@ -96,8 +98,25 @@ type_spec:
 prim_type:
     | TINT {Types.Int}
     | TBOOL {Types.Bool}
+    | x = VAR {Types.Record x}
 block:
     | block_items = list(stmt_opt_semi) {Block block_items}
+
+rec_decl:
+    | RECORD tag = VAR; LBRACE; members = list(member_decl) RBRACE 
+    {
+        let members_f = List.flatten members in
+        {tag; members=members_f}
+    }
+    ;
+
+member_decl:
+    | names = separated_nonempty_list(COMMA, VAR); COLON ; t = type_spec; option(SEMICOLON)
+    {
+        List.map (fun name -> {name; t}) names
+    }
+    | name= VAR; COLON; t= type_spec; option(SEMICOLON) {[{name; t}]}
+    ;
 
 stmt_top:
     | s =stmt; EOF {s}
@@ -128,6 +147,12 @@ lval:
         | V _ -> failwith "A declaration cannot be indexed"
         in 
         E (Subscript(arr_e, e))}
+    | rec_v = lval DOT x = VAR {
+        let rec_e = match rec_v with 
+        | E e -> e 
+        | V _ -> failwith "A Declarartion cannot be dotted"
+        in
+        E (Dot(rec_e, x))}
     | name = VAR COLON t = type_spec {V {name; init=None; var_type=t}}
     // | postfix_expr  {E ($1)}
     ;
@@ -167,9 +192,11 @@ expr :
 unary_expr: 
     | op = unary_op; e = expr  {Unary(op, e)}
     | postfix_expr {$1}
+    // b[1].x has to be allowed
 postfix_expr:
     | primary_expr {$1}
     | e = postfix_expr; LBRACK e1= expr RBRACK {Subscript(e, e1)}
+    | e = postfix_expr; DOT x = VAR {Dot (e, x)}
 primary_expr:
     | name = VAR {Var name}
     | i = INT {Int i}

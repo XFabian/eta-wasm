@@ -12,28 +12,28 @@
   parser
   unique_ids
   data_structures
-  cfg
-  dataflow
-  reaching
-  liveness
-  dominator
-  post_dominator
-  available_expressions
-  cfg_debug
-  cfg_to_code
-  solver
-  optimizer
-  ; sexp_printer
+  ; cfg
+  ; dataflow
+  ; reaching
+  ; liveness
+  ; dominator
+  ; post_dominator
+  ; available_expressions
+  ; cfg_debug
+  ; cfg_to_code
+  ; solver
+  ; optimizer
+  ; ; sexp_printer
   symbols
   types
   ast
-  resolve
-  typecheck
-  wtac
-  wtac_gen
-  wtac_print
-  object_writer
-  emit
+  ; resolve
+  ; typecheck
+  ; wtac
+  ; wtac_gen
+  ; wtac_print
+  ; object_writer
+  ; emit
   )
   (libraries sexplib)
   )

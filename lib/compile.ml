@@ -54,26 +54,18 @@ let parse_file f_name =
 let compile stage src =
   let _ = parse_stmt "if (2) {}" in
   let ast = parse_file src in
-  if stage = Setting.Parse then print_endline (Ast.show_prog ast)
-  else
-    let _res_vars_state, res_ast = Resolve.resolve ast in
+  if stage = Setting.Parse then print_endline (Ast.show_prog ast) else ()
+(* let _res_vars_state, res_ast = Resolve.resolve ast in
     Typecheck.typecheck res_ast;
     if stage = Setting.Validate then print_endline (Ast.show_prog res_ast)
-    else
-      (* Construct CFG *)
-      let wtac = Wtac_gen.gen res_ast in
-      (* let cfg = Cfg.CFG.create_cfg wtac in *)
-      (* let cfg_fun3 = List.hd (cfg|> List.tl |> List.tl |> List.tl) in
-      Cfg.CFG.print_cfg "cfg_test_comp1.dot" cfg_fun3; *)
-      let opt_wtac = Optimizer.optimize wtac in
-      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac;
-      (* Cfg.analyze cfg_fun1; *)
-      (* Dominator.analyze cfg_fun1; *)
-      (* Cfg_debug.gen_debug_info src cfg_fun1; *)
-      (* Post_dominator.analyze cfg_fun1; *)
-      (* Reaching.analyze cfg_fun1; *)
-      (* Cfg.optimize cfg_fun1; *)
-      if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
+    else () *)
+(* Construct CFG *)
+(* let wtac = Wtac_gen.gen res_ast in *)
+
+(* let opt_wtac = Optimizer.optimize wtac in
+      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac; *)
+
+(* if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in
-        Emit.emit wat_file wtac
+        Emit.emit wat_file wtac *)

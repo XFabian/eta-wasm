@@ -139,7 +139,9 @@ let rec resolve_stmt state = function
           { decl with name = unique_name; dims = dims_res; init = init_res } )
   | Assign { lhs; rhs } ->
       let res_rhs = List.map (resolve_expr state) rhs in
-      let fin_state, res_lhs = List.fold_left_map resolve_assign_target state  lhs in
+      let fin_state, res_lhs =
+        List.fold_left_map resolve_assign_target state lhs
+      in
       (fin_state, Assign { lhs = res_lhs; rhs = res_rhs })
   | Compound bl ->
       let new_state = StackMap.push state in
@@ -216,10 +218,3 @@ let resolve (Ast.Program decls) =
     List.fold_left_map resolve_top_level new_state decls
   in
   (fin_state, Ast.Program resolved_decls)
-
-(* TODO we first need to resolve the top level identifers
-   So that mutually recusrive functions are working
-   Check f that is ok for globals as well
-   So collect those identifiers first *)
-
-(* Can parameters be shadowed? *)
