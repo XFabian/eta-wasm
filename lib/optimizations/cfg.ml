@@ -83,11 +83,15 @@ module type CFGT = sig
   type block
 
   val blocks : t -> (int * block) list
+
+  (* Returns a sorted List *)
+  val nodes : t -> int list
   val get_block : t -> int -> block
   val fn_name : t -> string
   val fn_params : t -> string list
   val fn_type : t -> Wtac.wtac_type
   val fn_locals : t -> Wtac.obj list
+  val fn_globals : t -> Data_structures.VarSetS.t
 
   val make :
     (int * block) list ->
@@ -95,6 +99,7 @@ module type CFGT = sig
     string list ->
     Wtac.wtac_type ->
     Wtac.obj list ->
+    Data_structures.VarSetS.t ->
     t
 
   val create_cfg : Wtac.program -> t list
@@ -103,10 +108,12 @@ module type CFGT = sig
   val l_instrs : block -> (int * Wtac.instruction) list
   val block_id : block -> int
   val print_cfg : string -> t -> unit
-  val of_function : top_level -> t
+  val of_function : top_level -> Data_structures.VarSetS.t -> t
   val get_entry : t -> int
   val get_exit : t -> int
+  val update_block : t -> int -> block -> t
 
+  (* TODO should not be used *)
   val update_blocks :
     t -> ((int * Wtac.instruction) list -> (int * Wtac.instruction) list) -> t
 end
@@ -129,6 +136,11 @@ let resolver_map : (string, int) Hashtbl.t = Hashtbl.create 10
    This removes it form the signature
    So this Generated Module actaully does not satisfy the CFGT signature
    Because block is missing*)
+(* TODO
+Actually use a map here instead of assoc list
+This can be a bit problematic if I want to get exist
+  because I use head sometimes
+*)
 module Make (B : BLOCKT) : CFGT with type block = B.t = struct
   type t = {
     (* store basic blocks in association list, indexed by block # *)
@@ -138,23 +150,34 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
     fn_params : string list;
     fn_type : Wtac.wtac_type;
     fn_locals : Wtac.obj list;
+    globals : Data_structures.VarSetS.t;
   }
 
   type block = B.t
 
-  let make blocks fn_name fn_params fn_type fn_locals =
-    { blocks; fn_name; fn_params; fn_type; fn_locals }
+  let make blocks fn_name fn_params fn_type fn_locals globals =
+    { blocks; fn_name; fn_params; fn_type; fn_locals; globals }
 
   let blocks cfg = cfg.blocks
+  let nodes cfg = cfg.blocks |> List.map fst |> List.sort Int.compare
   let get_block cfg n = List.assoc n cfg.blocks
   let fn_name cfg = cfg.fn_name
   let fn_params cfg = cfg.fn_params
   let fn_type cfg = cfg.fn_type
   let fn_locals cfg = cfg.fn_locals
+  let fn_globals cfg = cfg.globals
   let succs cfg n = List.assoc n cfg.blocks |> B.succs
   let preds cfg n = List.assoc n cfg.blocks |> B.preds
   let l_instrs b = B.lab_instructions b
   let block_id b = B.id b
+
+  let update_block g n b' =
+    let new_blocks =
+      List.map
+        (fun (i, old_bl) -> if i = n then (i, b') else (i, old_bl))
+        g.blocks
+    in
+    { g with blocks = new_blocks }
 
   let update_blocks g f =
     let new_blocks =
@@ -290,7 +313,7 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
     (* List.iter (fun i -> Printf.printf "%s" (show_instruction i)) rem_instr; *)
     (rem_instr, instr_blocks)
 
-  let cfg_helper = function
+  let cfg_helper globals = function
     | Wtac.Function fn ->
         let label_stack = Stack.create () in
         let entry = make_entry () in
@@ -331,21 +354,22 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
             List.fold_left (fun acc b -> (B.id b, b) :: acc) [] all_blocks
           in
           id_counter := 0;
-          make all_cfg_blocks fn.name fn.params fn.f_type fn.locals
+          make all_cfg_blocks fn.name fn.params fn.f_type fn.locals globals
         (* { blocks = all_cfg_blocks; label = fn.name } *)
     | Data _ ->
         (* Globals are ignored for now*)
         failwith "Internal Error: Data not possible after filter"
 
   (* TODO Should ony be function *)
-  let of_function decl =
+  let of_function decl globals =
     match decl with
-    | Wtac.Function _ as f -> cfg_helper f
+    | Wtac.Function _ as f -> cfg_helper globals f
     | Wtac.Data _ ->
         failwith
           "Internal Error: This function should only be \n\
           \    called with function declarations"
 
+  (* TODO should not be used *)
   let create_cfg (Wtac.Program decls) =
     List.filter
       (fun x ->
@@ -353,7 +377,7 @@ module Make (B : BLOCKT) : CFGT with type block = B.t = struct
         | Function _ -> true
         | _ -> false)
       decls
-    |> List.map cfg_helper
+    |> List.map (cfg_helper Data_structures.VarSetS.empty)
 
   let pp fmt (blocks : (int * B.t) list) =
     let open Format in

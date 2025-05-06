@@ -22,25 +22,27 @@ let remove_dead_blocks cfg reach_s =
   let remove_edges edges edge_id =
     if not (IntSetS.mem edge_id reach_s) then edges else edge_id :: edges
   in
-  let new_blocks = List.fold_left
-    (fun acc (bl_id, bl) ->
-      if not (IntSetS.mem bl_id reach_s) then acc
-      else
-        (* Check edges *)
-        let preds = BLOCK.preds bl in
-        let succs = BLOCK.succs bl in
-        let new_preds = List.fold_left remove_edges [] preds in
-        let new_succs = List.fold_left remove_edges [] succs in
-        let new_block =
-          BLOCK.make (BLOCK.id bl)
-            (BLOCK.lab_instructions bl)
-            new_preds new_succs
-        in
-        acc @ [ (bl_id, new_block) ])
-    [] (CFG.blocks cfg)
-      in
-    (* Fucking annoying *)
-    CFG.make new_blocks (CFG.fn_name cfg) (CFG.fn_params cfg) (CFG.fn_type cfg) (CFG.fn_locals cfg)
+  let new_blocks =
+    List.fold_left
+      (fun acc (bl_id, bl) ->
+        if not (IntSetS.mem bl_id reach_s) then acc
+        else
+          (* Check edges *)
+          let preds = BLOCK.preds bl in
+          let succs = BLOCK.succs bl in
+          let new_preds = List.fold_left remove_edges [] preds in
+          let new_succs = List.fold_left remove_edges [] succs in
+          let new_block =
+            BLOCK.make (BLOCK.id bl)
+              (BLOCK.lab_instructions bl)
+              new_preds new_succs
+          in
+          acc @ [ (bl_id, new_block) ])
+      [] (CFG.blocks cfg)
+  in
+  (* Fucking annoying *)
+  CFG.make new_blocks (CFG.fn_name cfg) (CFG.fn_params cfg) (CFG.fn_type cfg)
+    (CFG.fn_locals cfg) (CFG.fn_globals cfg)
 
 let is_loop_header n loops =
   let loop_assoc =
@@ -209,16 +211,32 @@ let of_cfg (g : CFG.t) : Wtac.top_level =
   fn
 (* Recover Function *)
 
-let dce (_g : Cfg.CFG.t) = failwith "DCE not implemented"
-let cp (g : Cfg.CFG.t) = Reaching.run_constant_fold g
-let pass _n (g : CFG.t) = g
+let dce (g : Cfg.CFG.t) =
+  let live_g = Liveness.analyze g in
+  Printf.printf "Liveness Result:\n";
+  Liveness.Graph.pp (Format.formatter_of_out_channel stdout) live_g;
+  Liveness.run_dce live_g g
 
-let optimize_top_level decl =
+let cp (g : Cfg.CFG.t) = Reaching.run_constant_fold g
+
+let pass _n (g : CFG.t) =
+  (* Dead Code elimination removes assignment to globals right now
+  Either filter them out fromt he uses and defs and later not use them
+  Or seed the liveness analysis with the globals used in that function
+  Similarly for function arguments I think
+  Function arguments can contain pointers that are written to. So they have a side
+  effect. So we cannot remove them
+  *)
+  dce g
+
+(* List of all globals
+TODO: Restrict to globals used in the function that is optimized *)
+let optimize_top_level globals decl =
   match decl with
-  | Wtac.Data _ as g -> g
+  | Wtac.Data _ -> failwith "Internal Error: Not optimizing Globals."
   | Wtac.Function { name; _ } as f ->
       Printf.printf "Optimizing %s....\n" name;
-      let g = CFG.of_function f in
+      let g = CFG.of_function f globals in
       let cfg_name = Printf.sprintf "cfg_fun_%s.dot" name in
       (* Remove unreachable blocks to make cfg well formed *)
       let reach_bl = reachable_blocks g in
@@ -226,6 +244,7 @@ let optimize_top_level decl =
       let g' = remove_dead_blocks g reach_bl in
       Printf.printf "Created CFG! \n";
       Cfg.CFG.print_cfg cfg_name g';
+
       (* Early returns are pretty annoying
       If in one branch of an if a return is found
         then the other branch will contain all code until the exit
@@ -239,6 +258,25 @@ let optimize_top_level decl =
       new_cfg
 
 let optimize (Wtac.Program decls) =
-  Wtac.Program (List.map optimize_top_level decls)
+  (* get all globals *)
+  let globals_data, functions =
+    List.partition
+      (fun decl ->
+        match decl with
+        | Wtac.Data _ -> true
+        | _ -> false)
+      decls
+  in
+  let globals =
+    List.map
+      (fun g ->
+        match g with
+        | Wtac.Data g' -> g'.name
+        | _ -> failwith "Will not happen")
+      globals_data
+  in
+  let globals_set = VarSetS.of_list (globals @ [ "__stack_pointer" ]) in
+  let opt_funs = List.map (optimize_top_level globals_set) functions in
+  Wtac.Program (globals_data @ opt_funs)
 
 let optimize_once g (f : CFG.t -> CFG.t) = f g

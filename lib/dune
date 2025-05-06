@@ -15,11 +15,12 @@
   cfg
   dataflow
   reaching
+  liveness
   dominator
   post_dominator
+  available_expressions
   cfg_debug
   cfg_to_code
-  liveness
   solver
   optimizer
   ; sexp_printer
