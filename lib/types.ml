@@ -17,7 +17,7 @@ let rec pp (fmt : Format.formatter) = function
   | Bool -> Format.fprintf fmt "bool"
   | Unknown -> Format.fprintf fmt "unknown"
   | Array { elem_type } -> Format.fprintf fmt "%a[]" pp elem_type
-  | Record s -> Format.print_string s
+  | Record s -> Format.fprintf fmt "%s" s
   | FunType { param_types; ret_type } -> (
       let list_fmt =
         match param_types with

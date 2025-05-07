@@ -7,7 +7,7 @@ let print_position out_channel (lexbuf : Lexing.lexbuf) =
     (pos.pos_cnum - pos.pos_bol + 1)
     (Lexing.lexeme lexbuf)
 
-let _parse (s : string) : Ast.prog =
+let parse_string (s : string) : Ast.prog =
   let lexbuf = Lexing.from_string s in
   let ast =
     try Parser.prog Lexer.read lexbuf with
@@ -52,13 +52,13 @@ let parse_file f_name =
   ast
 
 let compile stage src =
-  let _ = parse_stmt "if (2) {}" in
   let ast = parse_file src in
-  if stage = Setting.Parse then print_endline (Ast.show_prog ast) else ()
-(* let _res_vars_state, res_ast = Resolve.resolve ast in
+  if stage = Setting.Parse then print_endline (Ast.show_prog ast)
+  else
+    let _res_vars_state, res_ast = Resolve.resolve ast in
     Typecheck.typecheck res_ast;
     if stage = Setting.Validate then print_endline (Ast.show_prog res_ast)
-    else () *)
+    else ()
 (* Construct CFG *)
 (* let wtac = Wtac_gen.gen res_ast in *)
 

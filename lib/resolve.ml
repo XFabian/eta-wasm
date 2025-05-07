@@ -70,6 +70,22 @@ type context = Glob | Fn of string
 (* Stack of maps representing scopes
    Pretty cool data structure that should be covered in lecture!
 *)
+(* Resolves types like Point *)
+let rec resolve_type state t =
+  match t with
+  | Types.Array { elem_type } as arr ->
+      let _ = resolve_type state elem_type in
+      arr
+  | FunType { param_types; ret_type } as f ->
+      let _ = List.map (resolve_type state) param_types in
+      let _ = List.map (resolve_type state) ret_type in
+      f
+  | Record s -> (
+      match StackMap.find_opt s state with
+      | Some _ -> Record s
+      | None -> failwith "Not declared record type used in type!")
+  | _ as ty -> ty
+
 let resolve_local_var_decl_helper state name =
   match StackMap.find_opt_curr name state with
   | Some _entry -> failwith "Duplicate variable declaration"
@@ -106,6 +122,9 @@ let rec resolve_expr state = function
       let res_e1 = resolve_expr state e1 in
       let res_e2 = resolve_expr state e2 in
       Subscript (res_e1, res_e2)
+  | Dot (e, s) ->
+      let res_e1 = resolve_expr state e in
+      Dot (res_e1, s)
 
 let resolve_local_var_decl state (vdecl : var_declaration) =
   let new_state, unique_name = resolve_local_var_decl_helper state vdecl.name in
@@ -183,6 +202,14 @@ let resolve_function state { name; params; f_type; body } =
   ( StackMap.pop fin_state,
     { name; params = res_params; f_type; body = new_body } )
 
+let resolve_member state { name; t } =
+  let res_t = resolve_type state t in
+  { name; t = res_t }
+
+let resolve_record state { tag; members } =
+  let res_members = List.map (resolve_member state) members in
+  { tag; members = res_members }
+
 let resolve_top_level state = function
   | Ast.FunDecl fn ->
       let fin_state, res_fn = resolve_function state fn in
@@ -196,16 +223,30 @@ let resolve_top_level state = function
           let entry = { unique_name = v_decl.name; global = true } in
           let fin_state = StackMap.add v_decl.name entry state in
           (fin_state, Global v_decl))
+  | RecordDecl re ->
+      let res_re = resolve_record state re in
+      (state, RecordDecl res_re)
 
 let resolve_only_top_level state = function
-  | Ast.FunDecl fn ->
+  | Ast.FunDecl fn -> (
       let open StackMap in
-      let en = { unique_name = fn.name; global = true } in
-      let new_state = StackMap.add fn.name en state in
-      new_state
+      match StackMap.find_opt fn.name state with
+      | Some _ -> failwith "Reoslve Error: Function was already declared"
+      | None ->
+          let en = { unique_name = fn.name; global = true } in
+          let new_state = StackMap.add fn.name en state in
+          new_state)
   | Global _ ->
       (* Globals need to be declared first so do nothing here *)
       state
+  | RecordDecl { tag; _ } -> (
+      match StackMap.find_opt tag state with
+      | Some _ -> failwith "Record already declared before"
+      | None ->
+          let open StackMap in
+          let en = { unique_name = tag; global = true } in
+          let new_state = StackMap.add tag en state in
+          new_state)
 
 let resolve (Ast.Program decls) =
   let init_state = StackMap.new_map () in

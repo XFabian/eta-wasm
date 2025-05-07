@@ -8,6 +8,7 @@ record Point2 {
     x : int;
     y : int
 }
+
 createPoint(x : int , y : int) : Point {
     return Point(x, y)
 }

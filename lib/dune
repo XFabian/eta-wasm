@@ -25,10 +25,11 @@
   ; optimizer
   ; ; sexp_printer
   symbols
+  struct_table
   types
   ast
-  ; resolve
-  ; typecheck
+  resolve
+  typecheck
   ; wtac
   ; wtac_gen
   ; wtac_print

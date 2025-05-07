@@ -28,6 +28,16 @@ let%expect_test "record_wrong_assign" =
   let t = Typecheck.typecheck_expr ast in
   if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable]
 
+let%expect_test "record_dupl_member" =
+  let ast = Compile.parse_string "record Point3 { x : int; x : int }" in
+  let t = Typecheck.typecheck_expr ast in
+  if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable]
+
+let%expect_test "record_member_arr_wrong" =
+  let ast = Compile.parse_string "record Point3 { x : int[][3]; x : int }" in
+  let t = Typecheck.typecheck_expr ast in
+  if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable]
+
 (* Except this one *)
 let%expect_test "record_correct_assgn" =
   let ast = Compile.parse_expr "p : Point; p.x = 2" in
