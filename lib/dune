@@ -30,11 +30,11 @@
   ast
   resolve
   typecheck
-  ; wtac
-  ; wtac_gen
-  ; wtac_print
+  wtac
+  wtac_gen
+  wtac_print
   ; object_writer
-  ; emit
+  emit
   )
   (libraries sexplib)
   )

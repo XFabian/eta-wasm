@@ -2,11 +2,14 @@ module W = struct
   include Wtac
 end
 
+module StringMap = Map.Make (String)
+
 let convert_type = function
   | Types.Int -> W.I64
   | Types.Bool
   | Types.Array _ ->
       W.I32
+  | Types.Record _ -> W.I32
   | _ -> failwith "Internal Error: Cannot convert functoin type"
 
 (* Ugly hack for now
@@ -230,6 +233,40 @@ let rec expr_gen = function
       let arg_instrs, arg_vals = List.map expr_gen args |> List.split in
 
       match (Symbols.get name).t with
+      | Types.FunType { ret_type = [ Record tag ]; _ } ->
+          (* TODO: Similar work to multi return. Maybe merge *)
+          let rsp, offset = !curr_rsp in
+          let offset_ptr =
+            make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+          in
+          let rsp_ptr =
+            make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+          in
+          let offset_instr =
+            W.Binary
+              {
+                op = Add;
+                src1 = rsp;
+                src2 = W.Imm (offset, W.I32);
+                dst = offset_ptr;
+                t = W.I32;
+              }
+          in
+          let cpy_instr =
+            W.Copy { src = offset_ptr; dst = rsp_ptr; t = W.I32 }
+          in
+          let members_m = (Struct_table.find tag).members in
+          (* Size of the struct is num mbers * 8 right now *)
+          let struct_size =
+            StringMap.fold (fun _ _ acc -> acc + 8) members_m 0
+          in
+          (* Need to align that size to nearest 16 *)
+          (* Function then does not return anything! *)
+          curr_rsp := (fst !curr_rsp, offset + Util.round_to_n struct_size 16);
+          ( [ offset_instr; cpy_instr ]
+            @ List.flatten arg_instrs
+            @ [ W.FCall { name; args = rsp_ptr :: arg_vals; dst = None } ],
+            rsp )
       | Types.FunType { ret_type = [ r ]; _ } ->
           let dst = make_wtac_var [ r ] in
           ( List.flatten arg_instrs
@@ -341,6 +378,31 @@ let rec expr_gen = function
       in
       let mem_dst = mem_of_wtac_var fin_addr in
       (e2_instr @ e1_instr @ [ offset; offset_instr ], mem_dst)
+  | Dot (e, x) ->
+      (* v_e should be a pointer to the first element *)
+      let e_instr, v_e = expr_gen e in
+      let member =
+        match Typecheck.typecheck_expr e with
+        | [ Types.Record rec_s ] ->
+            let s_members_m = (Struct_table.find rec_s).members in
+            let member = StringMap.find x s_members_m in
+            member
+        | _ -> failwith "Internal Error: Should be Record after Typecheck"
+      in
+      let fin_addr = make_wtac_var [ Types.Array { elem_type = Types.Int } ] in
+      let offset_instr =
+        W.Binary
+          {
+            op = Add;
+            src1 = v_e;
+            src2 = W.Imm (member.offset, W.I32);
+            dst = fin_addr;
+            t = W.I32;
+          }
+      in
+      (* TODO: This may should be loaded and then accessed in another var *)
+      let mem_dst = mem_of_wtac_var fin_addr in
+      (e_instr @ [ offset_instr ], mem_dst)
   | ArrayLit es ->
       let es_ty = List.map Typecheck.typecheck_expr es in
       let elem_type =
@@ -817,6 +879,74 @@ let gen_function Ast.{ name; params; f_type; body = Block stmts } =
   reset ();
   f
 
+(* These function take as first argument a Pointer at its base
+and then the arguments for the record
+In the end the Pointer is returned
+Callees of this function need to ensure that enough space is reserved *)
+let record_init_fun tag =
+  let member_sm = Struct_table.find tag in
+  (* ensures correct sort of bindings in increasing order of offset *)
+  let _, members =
+    StringMap.bindings member_sm.members
+    |> List.sort (fun (_, m_entry) (_, m_entry') ->
+           Int.compare Struct_table.(m_entry.offset) m_entry'.offset)
+    |> List.split
+  in
+  (* Create a name for the pointer *)
+  let p_name = make_named_wtac_ptr () in
+
+  let params, instrs =
+    List.map
+      (fun m ->
+        (* Compute offset and store value access nth argument as well *)
+        let offset_dst =
+          make_wtac_var [ Types.Array { elem_type = Types.Int } ]
+        in
+        let instr_calc =
+          W.Binary
+            {
+              op = Add;
+              src1 = Var p_name;
+              src2 = Imm (Struct_table.(m.offset), W.I32);
+              dst = offset_dst;
+              t = W.I32;
+            }
+        in
+        let param_name = Unique_ids.make_temp () in
+        Symbols.add_local_var param_name m.member_t;
+        (* Copy argument to that position i + 1 because 0 contains the pointer *)
+        let store_instrs =
+          W.Copy
+            {
+              src = W.Var param_name;
+              dst = mem_of_wtac_var offset_dst;
+              t = convert_type m.member_t;
+            }
+        in
+        (param_name, [ instr_calc; store_instrs ]))
+      members
+    |> List.split
+  in
+  let mem_types =
+    List.map (fun m -> convert_type Struct_table.(m.member_t)) members
+  in
+  let f_type =
+    W.FunType { param_type = [ W.I32 ] @ mem_types; ret_type = None }
+  in
+  let fun_rec =
+    Wtac.Function
+      {
+        name = tag;
+        body = List.flatten instrs @ [ W.Return [] ];
+        (* TODO: Params are wrong. member are missing *)
+        params = p_name :: params;
+        f_type;
+        locals = !vars;
+      }
+  in
+  reset ();
+  fun_rec
+
 let gen_top_level decl =
   match decl with
   | Ast.FunDecl fn -> gen_function fn
@@ -833,11 +963,13 @@ let gen_top_level decl =
         (* like an undefined*)
       in
       Data { name; t = var_type; value }
+  | Ast.RecordDecl { tag; _ } -> record_init_fun tag
 
 let gen (Ast.Program decls) : Wtac.program =
   let length_fun = length_conversion () in
-  let wtac_decls = List.map gen_top_level decls in
+  (* Each record defines a function with its name to create records with *)
+  let wtac_decls = decls |> List.map gen_top_level in
   (* Very ugly right now. SHould be added as Data *)
   Symbols.add_global_var "__stack_pointer"
     (Types.Array { elem_type = Types.Int });
-  Wtac.Program (length_fun :: wtac_decls)
+  Wtac.Program ([ length_fun ] @ wtac_decls)

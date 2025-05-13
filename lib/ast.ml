@@ -36,7 +36,7 @@ type expr =
 
 (* Need to have array_declaration here, since that keeps track of the dimension
 which I need
- *)
+*)
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
 [@@deriving show, sexp]
 

@@ -107,7 +107,7 @@ let rec typecheck_expr e : Types.t list =
           let s_members_m = (Struct_table.find rec_s).members in
           match StringMap.find_opt s s_members_m with
           | None -> failwith "Record does not have member!"
-          | Some Struct_table.{ member_t } -> [ member_t ])
+          | Some Struct_table.{ member_t; _ } -> [ member_t ])
       | _ -> failwith "Expression has to be Record Type!")
 
 (* TODO: Fun calls can only appear on the rhs of assignments *)
@@ -331,11 +331,15 @@ let add_top_level = function
   | Ast.FunDecl fn -> Symbols.add_fun fn.name fn.f_type false
   | RecordDecl rec_d ->
       validate_record rec_d;
-      let mem_entries =
+      (* TODO: Each struct entry consists of 8 bytes right now *)
+      let _, mem_entries =
         List.fold_left
-          (fun acc_m Ast.{ name; t } ->
-            StringMap.add name Struct_table.{ member_t = t } acc_m)
-          StringMap.empty rec_d.members
+          (fun (i, acc_m) Ast.{ name; t } ->
+            ( i + 1,
+              StringMap.add name
+                Struct_table.{ member_t = t; offset = i * 8 }
+                acc_m ))
+          (0, StringMap.empty) rec_d.members
       in
       (* Add Function with record name to symbols *)
       let param_types =

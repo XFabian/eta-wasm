@@ -2,8 +2,8 @@
 
 module StringMap = Map.Make (String)
 
-(* TODO If I want to keep track of offsets do it here *)
-type member_entry = { member_t : Types.t }
+(* Store positive offsets. Note that Stack grows downwards if stored on stack *)
+type member_entry = { member_t : Types.t; offset : int }
 type struct_entry = { members : member_entry StringMap.t }
 
 let struct_table : (string, struct_entry) Hashtbl.t = Hashtbl.create 20
