@@ -6,9 +6,11 @@ let pp_type out = function
   | I32 -> Format.pp_print_string out "i32"
   | I64 -> Format.pp_print_string out "i64"
   | _ -> failwith "Internal Error: Function types not printed"
+
 let pp_un_op out = function
   | Negate -> Format.pp_print_string out "-"
   | Not -> Format.pp_print_string out "!"
+  | Wrap -> Format.pp_print_string out "(i32)"
 
 let pp_bin_op out = function
   | Add -> Format.pp_print_string out "+"
@@ -38,9 +40,10 @@ let rec pp_instruction out = function
   | Unary { op; src; dst } ->
       Format.fprintf out "%a = %a%a" pp_value dst pp_un_op op pp_value src
   | Binary { op; src1; src2; dst; t } ->
-      Format.fprintf out "%a : %a = %a %a %a" pp_value dst pp_type t pp_value src1 pp_bin_op op
-        pp_value src2
-  | Copy { src; dst; _ } -> Format.fprintf out "%a = %a" pp_value dst pp_value src
+      Format.fprintf out "%a : %a = %a %a %a" pp_value dst pp_type t pp_value
+        src1 pp_bin_op op pp_value src2
+  | Copy { src; dst; _ } ->
+      Format.fprintf out "%a = %a" pp_value dst pp_value src
   | Load { src_ptr; dst } ->
       Format.fprintf out "%a = Load(%a)" pp_value dst pp_value src_ptr
   | Store { src; dst_ptr } ->

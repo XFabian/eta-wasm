@@ -41,6 +41,7 @@ let emit_bin_op t out op =
 let show_unary_op = function
   | Negate -> "i64.sub"
   | Not -> "i32.eqz"
+  | Wrap -> "i32.wrap_i64"
 
 let emit_value out = function
   (* I would like to have for booleans the i32 type
@@ -119,8 +120,8 @@ let rec emit_instruction chan = function
   | Unary { op = Negate; src; dst } ->
       Format.fprintf chan "i64.const 0@,%a@,%s@,%a@," emit_value src
         (show_unary_op Negate) emit_dst dst
-  | Unary { op = Not; src; dst } ->
-      Format.fprintf chan "%a@,%s@,%a@," emit_value src (show_unary_op Not)
+  | Unary { op; src; dst } ->
+      Format.fprintf chan "%a@,%s@,%a@," emit_value src (show_unary_op op)
         emit_dst dst
   | Binary { op; src1; src2; dst; t = wt } ->
       (* Put src1 and src2 on stack *)
