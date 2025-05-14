@@ -25,19 +25,25 @@ See cfg_early_return.eta for a tricky CFG
 Reconstructing that is tricky because the postdominator of the if Header is the exit node which is wrong. So everything after the if
 will be put into one of the branches.
 
-Also how are expectoins handled in a CFG?
+
+Early return would not be that probematic. I nee to modify the blcok to not have the terminator insde them and add the terminator later.
+This adds code to an if but this is inherently not wrong for such cases.
+This is a little more cleaner htan trying to have the very same structure.
+
+What happens if I early return in a loop?
+Also how are excectpions handled in a CFG?
+
+
 
 
 How can I test the performance?
 In wasmer? or profile Rust with the wasmer call
-## Optimizations
-- [ ] Define stuff like Constant folding for example
-- [ ] Define a Dataflow analysis 
-- [ ] Define Dominator and
-- [ ] Delete unused functions
 
 
 
+
+- [ ] Implement Beyond Relooper for a more standard TAC that has no loop and block constructs. The analysis is mostly independent of that.
+- [ ] Fix tests
 ## Not working
 Underscores emission
 
