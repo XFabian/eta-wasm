@@ -217,6 +217,12 @@ let rec typecheck_stmt ret_type = function
           if e_ty <> [ var_type ] then failwith "Initializer has the wrong type"
           else ()
       | None -> ());
+      (* Check if the type exists for records *)
+      (match var_type with
+      | Record tag ->
+          if Struct_table.mem tag then ()
+          else failwith "Struct type is not defined"
+      | _ -> ());
       Symbols.add_local_var name var_type
   | Ast.ArrayDecl { name; a_type; dims; init } ->
       typecheck_arr_decl name a_type dims init

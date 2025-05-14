@@ -36,10 +36,17 @@ let%expect_test "record_not_mem2" =
       ());
   [%expect {| Failure: Expression has to be Record Type! |}]
 
-(* let%expect_test "record_undef" =
-  let ast = Compile.parse_stmt "p : Point2D" in
-  let t = Typecheck.typecheck_stmt ast in
-  if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable] *)
+let%expect_test "record_undef" =
+  expect_failure (fun () ->
+      let ast = Compile.parse_stmt "p : Point5D" in
+      let _ =
+        ast
+        |> Resolve.resolve_stmt (Resolve.StackMap.new_map ())
+        |> snd
+        |> Typecheck.typecheck_stmt []
+      in
+      ());
+  [%expect {| Failure: Struct type is not defined |}]
 
 let%expect_test "record_wrong_init" =
   expect_failure (fun () ->
@@ -55,15 +62,21 @@ let%expect_test "record_wrong_assign" =
       ());
   [%expect {| Failure: Types of LHS and RHS are mismatched |}]
 
-(* let%expect_test "record_dupl_member" =
-  let ast = Compile.parse_string "record Point3 { x : int; x : int }" in
-  let t = Typecheck.typecheck ast in
-  if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable]
+let%expect_test "record_dupl_member" =
+  expect_failure (fun () ->
+      let ast = Compile.parse_string "record Point3 { x : int; x : int }" in
+      let _ = ast |> Resolve.resolve |> snd |> Typecheck.typecheck in
+      ());
+  [%expect {| Failure: Member already declared in record |}]
 
-let%expect_test "record_member_arr_wrong" =
-  let ast = Compile.parse_string "record Point3 { x : int[][3]; x : int }" in
-  let t = Typecheck.typecheck ast in
-  if t = [ Types.Int ] then [%expect {| |}] else [%expect.unreachable] *)
+(* let%expect_test "record_member_arr_wrong" =
+  expect_failure (fun () ->
+      let ast =
+        Compile.parse_string "record Point3 { x : int[][3]; y : int }"
+      in
+      let _ = ast |> Resolve.resolve |> snd |> Typecheck.typecheck in
+      ());
+  [%expect {| |}] *)
 
 (* Except this one *)
 let%expect_test "record_correct_assgn" =
