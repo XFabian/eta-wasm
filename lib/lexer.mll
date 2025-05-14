@@ -50,6 +50,8 @@ rule read =
     | "if" {IF}
     | "else" {ELSE}
     | "while" {WHILE}
+    | "record" {RECORD}
+    | "." {DOT}
     | id {VAR (Lexing.lexeme lexbuf)}
     | int {INT (int_of_string (Lexing.lexeme lexbuf))}
     | '"' {read_string (Buffer.create 17) lexbuf }

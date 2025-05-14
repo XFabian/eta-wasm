@@ -30,18 +30,17 @@ type expr =
   | FunCall of { name : string; args : expr list }
   (* a[1] for example or a[2][3] Subscript(a, Subscript 2 ,3) *)
   | Subscript of expr * expr
+  (* p.x for example or p.y.x *)
+  | Dot of expr * string
 [@@deriving show, sexp]
 
 (* Need to have array_declaration here, since that keeps track of the dimension
 which I need
- *)
+*)
 type var_declaration = { name : string; init : expr option; var_type : Types.t }
 [@@deriving show, sexp]
 
-type assign_target = 
-| V of var_declaration
-| E of expr
-[@@deriving show, sexp]
+type assign_target = V of var_declaration | E of expr [@@deriving show, sexp]
 
 type stmt =
   | LocalDecl of var_declaration
@@ -68,9 +67,20 @@ type func_declaration = {
   f_type : Types.t;
   body : block;
 }
+(* Each element in a record takes 64 bytes
+
+*)
 [@@deriving show, sexp]
 
-type declaration = Global of var_declaration | FunDecl of func_declaration
+type record_declaration = { tag : string; members : member_declaration list }
+[@@deriving show, sexp]
+
+and member_declaration = { name : string; t : Types.t } [@@deriving show, sexp]
+
+type declaration =
+  | Global of var_declaration
+  | FunDecl of func_declaration
+  | RecordDecl of record_declaration
 [@@deriving show, sexp]
 
 type prog = Program of declaration list [@@deriving show, sexp]

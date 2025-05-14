@@ -7,7 +7,7 @@ let print_position out_channel (lexbuf : Lexing.lexbuf) =
     (pos.pos_cnum - pos.pos_bol + 1)
     (Lexing.lexeme lexbuf)
 
-let _parse (s : string) : Ast.prog =
+let parse_string (s : string) : Ast.prog =
   let lexbuf = Lexing.from_string s in
   let ast =
     try Parser.prog Lexer.read lexbuf with
@@ -52,7 +52,6 @@ let parse_file f_name =
   ast
 
 let compile stage src =
-  let _ = parse_stmt "if (2) {}" in
   let ast = parse_file src in
   if stage = Setting.Parse then print_endline (Ast.show_prog ast)
   else
@@ -62,17 +61,9 @@ let compile stage src =
     else
       (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in
-      (* let cfg = Cfg.CFG.create_cfg wtac in *)
-      (* let cfg_fun3 = List.hd (cfg|> List.tl |> List.tl |> List.tl) in
-      Cfg.CFG.print_cfg "cfg_test_comp1.dot" cfg_fun3; *)
-      let opt_wtac = Optimizer.optimize wtac in
-      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac;
-      (* Cfg.analyze cfg_fun1; *)
-      (* Dominator.analyze cfg_fun1; *)
-      (* Cfg_debug.gen_debug_info src cfg_fun1; *)
-      (* Post_dominator.analyze cfg_fun1; *)
-      (* Reaching.analyze cfg_fun1; *)
-      (* Cfg.optimize cfg_fun1; *)
+
+      (* let opt_wtac = Optimizer.optimize wtac in
+      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac; *)
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in

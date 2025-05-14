@@ -93,6 +93,13 @@ module IntSetS = MakeSet (struct
   let to_string = string_of_int
 end)
 
+module VarSetS = MakeSet (struct
+  type t = string
+
+  let compare = String.compare
+  let to_string t = t
+end)
+
 (* TODO: Not sure if needed to have this id *)
 module IdVarSet = MakeSet (struct
   type t = int * string

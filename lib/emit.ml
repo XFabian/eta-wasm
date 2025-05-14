@@ -6,6 +6,7 @@ let emit_type = function
   | Types.Bool -> "i32"
   (* TODO : Not sure if right. But array is a pointer  *)
   | Types.Array _ -> "i32"
+  | Types.Record _ -> "i32"
   | _ ->
       failwith
         "Internal error. Other types do not have a representaiton in WASM"
@@ -69,7 +70,7 @@ let emit_value out = function
                 failwith
                   "Internal Error: Mem should not have Function attributes"
           in
-          Format.fprintf out "%s@, %s.load" sel (emit_type elem_type)
+          Format.fprintf out "%s@,%s.load" sel (emit_type elem_type)
       | _ -> failwith "Internal Error: Memory should have array type")
 
 (* Overwrite type of immediate

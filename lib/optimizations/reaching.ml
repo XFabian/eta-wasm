@@ -271,7 +271,7 @@ let analyze (cfg : Cfg.CFG.t) : unit =
   Printf.printf "%s\n"
     (IdMap.to_string (fun _ v -> Wtac.show_value v) constant_map);
   let new_blocks = constant_prop g ud_map constant_map in
-  let new_cfg = Cfg.CFG.make new_blocks "blub" [] Wtac.I32 [] in
+  let new_cfg = Cfg.CFG.make new_blocks "blub" [] Wtac.I32 [] VarSetS.empty in
   let opt_g = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g;
   Printf.printf "Copy Propagation Map \n";
@@ -282,7 +282,7 @@ let analyze (cfg : Cfg.CFG.t) : unit =
   Printf.printf "After copy propagation";
   let solved_g' = Solver.solve opt_g in
   let copy_blocks = copy_prop solved_g' copy_map in
-  let new_cfg = Cfg.CFG.make copy_blocks "blub" [] Wtac.I32 [] in
+  let new_cfg = Cfg.CFG.make copy_blocks "blub" [] Wtac.I32 [] VarSetS.empty in
   Cfg.CFG.print_cfg "optimized.dot" new_cfg;
   let opt_g' = Graph.of_cfg init new_cfg in
   Graph.pp f opt_g'
@@ -343,4 +343,5 @@ let constant_fold_instr instr =
 let constant_fold_block (lab_bl : (int * instruction) list) =
   List.map (fun (i, instrs) -> (i, constant_fold_instr instrs)) lab_bl
 
-let run_constant_fold (g : Cfg.CFG.t) = Cfg.CFG.update_blocks g constant_fold_block
+let run_constant_fold (g : Cfg.CFG.t) =
+  Cfg.CFG.update_blocks g constant_fold_block

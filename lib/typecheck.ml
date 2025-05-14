@@ -1,11 +1,18 @@
+(* Relies on Symbol Map for variables and functoins and struct_table for records *)
+
+module StringMap = Map.Make (String)
+module StringSet = Set.Make (String)
+
 let is_arr = function
   | [ Types.Array _ ] -> true
   | _ -> false
 
-let is_lval_expr = function
+let rec is_lval_expr = function
   | Ast.Var _
   | Subscript _ ->
       true
+  (* Not sure if we need to go down here *)
+  | Dot (strct, _) -> is_lval_expr strct
   | _ -> false
 
 let is_lval = function
@@ -26,7 +33,7 @@ let rec dim_check es1 es2 =
 
 let rec typecheck_expr e : Types.t list =
   match e with
-  | Ast.Var "_" -> [Types.Unknown]
+  | Ast.Var "_" -> [ Types.Unknown ]
   | Ast.Var x -> [ (Symbols.get x).t ]
   | Ast.Int _ -> [ Types.Int ]
   | Ast.Bool _ -> [ Types.Bool ]
@@ -93,6 +100,15 @@ let rec typecheck_expr e : Types.t list =
       | [ Types.Array { elem_type } ], [ Types.Int ] -> [ elem_type ]
       | _, [ Types.Int ] -> failwith "Trying to index into non-array"
       | _, _ -> failwith "Array Index must be an integer")
+  | Ast.Dot (e, s) -> (
+      let e_t = typecheck_expr e in
+      match e_t with
+      | [ Types.Record rec_s ] -> (
+          let s_members_m = (Struct_table.find rec_s).members in
+          match StringMap.find_opt s s_members_m with
+          | None -> failwith "Record does not have member!"
+          | Some Struct_table.{ member_t; _ } -> [ member_t ])
+      | _ -> failwith "Expression has to be Record Type!")
 
 (* TODO: Fun calls can only appear on the rhs of assignments *)
 (* Useful for function calls and procedures *)
@@ -217,14 +233,14 @@ let rec typecheck_stmt ret_type = function
           failwith "Amount of lvalues and rhs values mismatch!"
         else
           (* TODO defined a helper that returns the values of where the mismatch happened *)
-          let eq_mod_unknown t1 t2 = 
-            match t1, t2 with 
-            | Types.Unknown, _ -> true 
-            | _, Types.Unknown -> true 
+          let eq_mod_unknown t1 t2 =
+            match (t1, t2) with
+            | Types.Unknown, _ -> true
+            | _, Types.Unknown -> true
             | t1', t2' -> t1' = t2'
           in
-        if not (List.equal eq_mod_unknown lhs_t rhs_t) then
-          failwith "Types of LHS and RHS are mismatched"
+          if not (List.equal eq_mod_unknown lhs_t rhs_t) then
+            failwith "Types of LHS and RHS are mismatched"
   | Ast.Compound (Block bl) -> List.iter (typecheck_stmt ret_type) bl
   | Ast.If { guard; then_br; else_br } ->
       let e_t = typecheck_expr guard in
@@ -245,6 +261,8 @@ let rec typecheck_stmt ret_type = function
       | [] -> ()
       | _ -> failwith "Procedure call! Return type needs to be empty")
 
+(* TODO: Not checking in function declarations if array type is complete
+  Or is that handled in the parser? *)
 let typecheck_fun_decl Ast.{ name; params; f_type; body = Block bl } =
   let p_t, ret_ty =
     match f_type with
@@ -271,8 +289,14 @@ let typecheck_fun_decl Ast.{ name; params; f_type; body = Block bl } =
   List.iter2 (fun p ty -> Symbols.add_local_var p ty) params p_t;
   List.iter (typecheck_stmt ret_ty) bl
 
+(* We know  that record exists and we know that the types 
+are known as well from resolver 
+So do not need to do anything right now*)
+let typecheck_record_decl _rec_d = ()
+
 let typecheck_top_level = function
   | Ast.FunDecl fn -> typecheck_fun_decl fn
+  | Ast.RecordDecl rec_d -> typecheck_record_decl rec_d
   | Ast.Global { name; init; var_type } ->
       let init_t = Option.map typecheck_expr init in
       let _ =
@@ -285,9 +309,47 @@ let typecheck_top_level = function
       in
       Symbols.add_global_var name var_type
 
+(* No duplicate members for example 
+TODO: Not checking if array type is complete*)
+let validate_record Ast.{ members; _ } =
+  let validate_member acc_s Ast.{ name; t } =
+    if StringSet.mem name acc_s then
+      failwith "Member already declared in record"
+    else
+      let new_acc_s = StringSet.add name acc_s in
+      (* The array type has to be correct int[][3] not allowed *)
+      (match t with
+      | FunType _ -> failwith "Function type not allowed inside records!"
+      | _ -> ());
+      new_acc_s
+  in
+  let _ = List.fold_left validate_member StringSet.empty members in
+  ()
+
 (* For mutual recursion we add functions here already  *)
 let add_top_level = function
   | Ast.FunDecl fn -> Symbols.add_fun fn.name fn.f_type false
+  | RecordDecl rec_d ->
+      validate_record rec_d;
+      (* TODO: Each struct entry consists of 8 bytes right now *)
+      let _, mem_entries =
+        List.fold_left
+          (fun (i, acc_m) Ast.{ name; t } ->
+            ( i + 1,
+              StringMap.add name
+                Struct_table.{ member_t = t; offset = i * 8 }
+                acc_m ))
+          (0, StringMap.empty) rec_d.members
+      in
+      (* Add Function with record name to symbols *)
+      let param_types =
+        List.fold_left (fun acc Ast.{ t; _ } -> acc @ [ t ]) [] rec_d.members
+      in
+      let fn_type =
+        Types.FunType { param_types; ret_type = [ Types.Record rec_d.tag ] }
+      in
+      Symbols.add_fun rec_d.tag fn_type true;
+      Struct_table.add_struct rec_d.tag Struct_table.{ members = mem_entries }
   | _ -> ()
 
 let typecheck (Ast.Program decls) =

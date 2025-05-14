@@ -37,7 +37,7 @@ let get name = Hashtbl.find symbol_table name
 let get_opt name = Hashtbl.find_opt symbol_table name
 let remove name = Hashtbl.remove symbol_table name
 let bindings () = Hashtbl.to_seq symbol_table |> List.of_seq
-let print_symbols () = 
-    let ls = bindings () in 
-    List.iter (fun (k,v) -> Printf.fprintf stdout "%s: %s\n" k (show_entry v)) 
-    ls
+
+let print_symbols () =
+  let ls = bindings () in
+  List.iter (fun (k, v) -> Printf.fprintf stdout "%s: %s\n" k (show_entry v)) ls

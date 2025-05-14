@@ -35,7 +35,10 @@ Also how are excectpions handled in a CFG?
 
 
 
-
+LLVM optimizations passes 
+https://llvm.org/docs/Passes.html
+Nice overview of different analysis
+https://www.cs.colostate.edu/~cs553/ClassNotes/lecture05-dataflow-CSE.ppt.pdf
 How can I test the performance?
 In wasmer? or profile Rust with the wasmer call
 
