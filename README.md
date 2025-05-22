@@ -41,6 +41,7 @@ In wasmer? or profile Rust with the wasmer call
 
 
 
+- [ ] Write a Repl that evaluates terms in the language and puts them into a global context
 ## Not working
 Underscores emission
 

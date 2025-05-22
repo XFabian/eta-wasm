@@ -62,8 +62,8 @@ let compile stage src =
       (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in
 
-      (* let opt_wtac = Optimizer.optimize wtac in
-      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac; *)
+      let opt_wtac = Optimizer.optimize wtac in
+      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac;
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in

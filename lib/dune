@@ -12,17 +12,17 @@
   parser
   unique_ids
   data_structures
-  ; cfg
-  ; dataflow
-  ; reaching
-  ; liveness
-  ; dominator
-  ; post_dominator
-  ; available_expressions
-  ; cfg_debug
-  ; cfg_to_code
-  ; solver
-  ; optimizer
+  cfg
+  dataflow
+  reaching
+  liveness
+  dominator
+  post_dominator
+  available_expressions
+  cfg_debug
+  cfg_to_code
+  solver
+  optimizer
   ; ; sexp_printer
   symbols
   struct_table
