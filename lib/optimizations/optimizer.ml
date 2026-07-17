@@ -11,9 +11,11 @@ open Data_structures
 *)
 let reachable_blocks cfg =
   let rec reach_helper b reach =
-    let n_reach = IntSetS.add b reach in
-    let succs = CFG.succs cfg b in
-    List.fold_left (fun acc s -> reach_helper s acc) n_reach succs
+    if IntSetS.mem b reach then reach 
+    else
+      let n_reach = IntSetS.add b reach in
+      let succs = CFG.succs cfg b in
+      List.fold_left (fun acc s -> reach_helper s acc) n_reach succs
   in
   reach_helper (CFG.get_entry cfg) IntSetS.empty
 
