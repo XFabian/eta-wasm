@@ -50,6 +50,7 @@ module Fact = struct
   let to_string = VarMap.to_string (fun _ v -> IntSetS.to_string v)
 end
 
+module CFG = Cfg.CFG
 module Graph = AsGraph (Fact) (Cfg.CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
@@ -250,7 +251,37 @@ let copy_prop g cp_map =
   in
   new_blocks
 
-let analyze (cfg : Cfg.CFG.t) : unit =
+let analyze (cfg : Cfg.CFG.t) : Graph.t =
+  let init _l = VarMap.empty in
+  let g = Graph.of_cfg init cfg in
+  Solver.solve g
+
+let copy_prop_block (b : CFG.block) cp_map =
+  let lookup i var =
+    match IdMap.find_opt i cp_map with
+    | None -> None
+    | Some (old_var, new_val) -> if var = old_var then Some new_val else None
+  in
+  let new_block =
+    List.fold_left
+      (fun new_block (i, instr) ->
+        new_block @ [ (i, rewrite_instr i instr lookup) ])
+      [] (CFG.l_instrs b)
+  in
+  Cfg.BLOCK.update_instr b new_block
+
+let run_cp (g : Graph.t) (cfg : CFG.t) : Cfg.CFG.t =
+  let ud_map = make_use_def g in
+  let copy_map = copy_prop_map g ud_map in
+
+  List.fold_left
+    (fun cfg block_id ->
+      let block = CFG.get_block cfg block_id in
+      let new_block = copy_prop_block block copy_map in
+      CFG.update_block cfg block_id new_block)
+    cfg (CFG.nodes cfg)
+
+let analyze_old (cfg : Cfg.CFG.t) : unit =
   let init _l = VarMap.empty in
   let g = Graph.of_cfg init cfg in
   let f = Format.formatter_of_out_channel stdout in

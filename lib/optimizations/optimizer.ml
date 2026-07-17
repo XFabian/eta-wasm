@@ -263,7 +263,9 @@ let dce (g : Cfg.CFG.t) =
   Liveness.Graph.pp (Format.formatter_of_out_channel stdout) live_g;
   Liveness.run_dce live_g g
 
-let cp (g : Cfg.CFG.t) = Reaching.run_constant_fold g
+let cp (g : Cfg.CFG.t) =
+  let reach_g = Reaching.analyze g in
+  Reaching.run_cp reach_g g |> Reaching.run_constant_fold
 
 let pass _n (g : CFG.t) =
   (* Dead Code elimination removes assignment to globals right now
@@ -275,7 +277,7 @@ let pass _n (g : CFG.t) =
   *)
   (* For stack pointer stuff I need copy propagation
   and constant propagation *)
-  dce g |> dce |> dce |> dce |> dce
+  dce g |> dce |> cp |> dce |> cp |> dce |> cp |> dce
 
 (* List of all globals
 TODO: Restrict to globals used in the function that is optimized *)
