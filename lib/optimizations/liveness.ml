@@ -97,7 +97,7 @@ let dce_block (lb : int -> fact) (b : CFG.block) =
     List.fold_left
       (fun new_block (i, instr) ->
         let out_fact_i = lb i in
-        Printf.printf "Fact at %d: %s\n" i (VarSetS.to_string out_fact_i);
+        (* Printf.printf "Fact at %d: %s\n" i (VarSetS.to_string out_fact_i); *)
         match def_of_instr (i, instr) with
         | Some def ->
             (* If it is not live in out set remove it  *)

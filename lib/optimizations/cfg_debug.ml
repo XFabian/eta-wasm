@@ -17,6 +17,8 @@ let run_command cmd args =
 let perm = 0o755
 let create_newdir path perm =
   if not (Sys.file_exists path) then Sys.mkdir path perm
+
+    
 let gen_debug_info filename cfg= 
   
   let file_dir = Filename.dirname filename in

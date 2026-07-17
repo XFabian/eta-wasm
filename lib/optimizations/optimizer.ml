@@ -40,7 +40,7 @@ let remove_dead_blocks cfg reach_s =
           acc @ [ (bl_id, new_block) ])
       [] (CFG.blocks cfg)
   in
-  (* Fucking annoying *)
+
   CFG.make new_blocks (CFG.fn_name cfg) (CFG.fn_params cfg) (CFG.fn_type cfg)
     (CFG.fn_locals cfg) (CFG.fn_globals cfg)
 
@@ -75,13 +75,13 @@ let rec of_cfg_helper g loops dom_tree wS labelStack instrs stop_node_id =
 
           match curr_if_label with
           | Some lab -> (
-              print_endline ("Found if Label: " ^ lab);
+              (* print_endline ("Found if Label: " ^ lab); *)
               match terminator with
               | Wtac.Br l when l = lab ->
-                  print_endline "Found if_end";
+                  (* print_endline "Found if_end"; *)
                   (true, curr_instrs)
               | Return _ ->
-                  print_endline "Found Return";
+                  (* print_endline "Found Return"; *)
                   (true, curr_instrs)
               | _ -> (false, []))
           | None -> (false, [])
@@ -96,7 +96,7 @@ let rec of_cfg_helper g loops dom_tree wS labelStack instrs stop_node_id =
         let curr_instrs = curr_block |> CFG.l_instrs |> List.split |> snd in
         match is_loop_header curr_node loops with
         | Some loop_body ->
-            print_endline "Handling Loop";
+            (* print_endline "Handling Loop"; *)
             let loop_instrs, next_nodes =
               handle_loop g loops dom_tree curr_node loop_body labelStack
             in
@@ -259,8 +259,8 @@ let of_cfg (g : CFG.t) : Wtac.top_level =
 
 let dce (g : Cfg.CFG.t) =
   let live_g = Liveness.analyze g in
-  Printf.printf "Liveness Result:\n";
-  Liveness.Graph.pp (Format.formatter_of_out_channel stdout) live_g;
+  (* Printf.printf "Liveness Result:\n";
+  Liveness.Graph.pp (Format.formatter_of_out_channel stdout) live_g; *)
   Liveness.run_dce live_g g
 
 let cp (g : Cfg.CFG.t) =
@@ -285,14 +285,14 @@ let optimize_top_level globals decl =
   match decl with
   | Wtac.Data _ -> failwith "Internal Error: Not optimizing Globals."
   | Wtac.Function { name; _ } as f ->
-      Printf.printf "Optimizing %s....\n" name;
+      (* Printf.printf "Optimizing %s....\n" name; *)
       let g = CFG.of_function f globals in
       let cfg_name = Printf.sprintf "cfg_fun_%s.dot" name in
       (* Remove unreachable blocks to make cfg well formed *)
       let reach_bl = reachable_blocks g in
       (* Printf.printf "%s\n" (IntSetS.to_string reach_bl); *)
       let g' = remove_dead_blocks g reach_bl in
-      Printf.printf "Created CFG! \n";
+      (* Printf.printf "Created CFG! \n"; *)
       Cfg.CFG.print_cfg cfg_name g';
 
       (* Early returns are pretty annoying
@@ -300,7 +300,7 @@ let optimize_top_level globals decl =
         then the other branch will contain all code until the exit
       which is wrong *)
       let opt_g = pass 2 g' in
-      Printf.printf "Converting CFG back to Code....\n";
+      (* Printf.printf "Converting CFG back to Code....\n"; *)
       let new_cfg = of_cfg opt_g in
       (* List.iter (fun b ->
          Cfg.BLOCK.pp (Format.formatter_of_out_channel stdout) b)

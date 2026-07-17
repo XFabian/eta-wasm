@@ -60,7 +60,6 @@ let immediate_doms g =
   let block_ids_no_entry = List.filter (fun i -> let preds = CFG.preds (Graph.cfg g) i in
                                       List.length preds > 0
   ) block_ids in
-  List.iter (fun i -> Printf.printf "%d " i) block_ids_no_entry;
   List.fold_left
     (fun acc id ->
       let strict_dom = IntSetS.remove id (Graph.out g id) in

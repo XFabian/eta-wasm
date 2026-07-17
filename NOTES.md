@@ -111,6 +111,3 @@ Can a global initializer only be a constant?
 - GADT example:
   https://blog.mads-hartmann.com/ocaml/2015/01/05/gadt-ocaml.html
 
-## Misc
-
-`dune utop` is not working, linking issues?
