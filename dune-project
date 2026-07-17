@@ -6,22 +6,30 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github xaver-fabian/wetac))
 
-(authors "Author Name")
+(authors "Xaver Fabian")
 
-(maintainers "Maintainer Name")
+(maintainers "Xaver Fabian <xaver.fabian@gmail.com>")
 
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(license MIT)
 
 (package
  (name wetac)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune cmdliner sexplib expect_test_helpers_core ppx_expect ppx_sexp_conv)
+ (synopsis "A compiler for the Eta programming language targeting WebAssembly")
+ (description
+  "Wetac compiles Eta, a small imperative language with integers, booleans, arrays, records and multiple return values, to WebAssembly. It emits WAT, which can be assembled with wat2wasm. Includes a CFG-based optimization framework with dominators, dataflow analyses and constant propagation.")
+ (depends
+  ocaml
+  dune
+  menhir
+  cmdliner
+  sexplib
+  ppx_deriving
+  ppx_sexp_conv
+  expect_test_helpers_core
+  ppx_expect)
  (tags
-  (topics "to describe" your project)))
+  (compiler webassembly wasm eta ocaml)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
