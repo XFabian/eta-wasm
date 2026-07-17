@@ -28,11 +28,15 @@ let stage =
       let doc = "Run the WTac Generation" in
       (Setting.Wtac, Arg.info ["wtac"] ~doc)
   in
+  let optimize =
+    let doc = "Run the Optimizer and dump the optimized WTac" in
+    (Setting.Optimize, Arg.info ["optimize"] ~doc)
+  in
   let codegen =
     let doc = "Run the Code Generation to WASM" in
     (Setting.Codegen, Arg.info ["codegen"] ~doc)
 in
-  Arg.(value & Arg.vflag Setting.Codegen [parse; validate; wtac; codegen])
+  Arg.(value & Arg.vflag Setting.Codegen [parse; validate; wtac; optimize; codegen])
 
 
 (* $ applies evaluation of args onto evaluation of function driver
