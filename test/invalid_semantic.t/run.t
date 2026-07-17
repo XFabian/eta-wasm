@@ -37,7 +37,6 @@
   [125]
 
   $ wetac --validate semantic6.eta;
-  Hi
   wetac: internal error, uncaught exception:
          Failure("Types of LHS and RHS are mismatched")
          
