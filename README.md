@@ -36,8 +36,8 @@ dune build
 The compiler is then at `_build/default/bin/main.exe`, or run it with
 `dune exec wetac --`.
 
-To run the generated code — and to run the test suite — you also need
-[wabt](https://github.com/WebAssembly/wabt) for `wat2wasm`, and
+To run the generated code, and to run the test suite, you also need
+[wabt](https://github.com/WebAssembly/wabt) for `wat2wasm` and
 [wasmer](https://wasmer.io/) to execute the module. On Ubuntu:
 
 ```sh
@@ -46,8 +46,6 @@ curl https://get.wasmer.io -sSfL | sh
 ```
 
 Only the `wasmer` command line tool is needed, not the OCaml bindings.
-
-Both are used by the test suite.
 
 ## Usage
 
@@ -65,6 +63,7 @@ intermediate output:
 | `--parse` | parsing, prints the AST |
 | `--validate` | name resolution and typechecking, prints the resolved AST |
 | `--wtac` | WTac generation, prints the IR |
+| `--optimize` | the optimizer, dumps the optimized IR (see Optimizations) |
 | `--codegen` | WASM emission (default) |
 
 Programs that allocate need `malloc.wat` linked in. It is a bump allocator
@@ -104,9 +103,10 @@ flow from it afterwards. On top of that:
 - constant propagation
 - dead block removal
 
-These are not currently wired into codegen. `lib/compile.ml` runs the optimizer
-and dumps the result next to the source as `<name>_opt.debug.wtac` for
-inspection, but the WAT is emitted from the unoptimized IR.
+These are not wired into codegen. `--codegen` emits WAT straight from the
+unoptimized IR. The optimizer runs only under the `--optimize` flag, which dumps
+the optimized IR next to the source as `<name>_opt.debug.wtac` for inspection;
+it is a work in progress and not part of the default path.
 
 ## Tests
 
@@ -125,7 +125,8 @@ and returns non-zero on failure. `test/invalid_parse.t` and
 
 ## Known gaps
 
-- The optimizer is not connected to code generation (see above).
+- The optimizer is not connected to code generation; it runs only under
+  `--optimize` (see above).
 - Memory is never freed. There is no `free` and no GC — tolerable for
   short-lived WASM modules that get torn down anyway, but it is a leak.
 - Post-dominators do not behave correctly for functions with early returns, see
