@@ -59,12 +59,11 @@ let compile stage src =
     Typecheck.typecheck res_ast;
     if stage = Setting.Validate then print_endline (Ast.show_prog res_ast)
     else
-      (* Construct CFG *)
       let wtac = Wtac_gen.gen res_ast in
-
-      (* let opt_wtac = Optimizer.optimize wtac in
-      Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac; *)
       if stage = Setting.Wtac then Wtac_print.print_wtac src wtac
+      else if stage = Setting.Optimize then
+        let opt_wtac = Optimizer.optimize wtac in
+        Wtac_print.print_wtac (Filename.chop_extension src ^ "_opt.eta") opt_wtac
       else
         let wat_file = Filename.chop_extension src ^ ".wat" in
         Emit.emit wat_file wtac

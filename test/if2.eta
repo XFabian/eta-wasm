@@ -1,0 +1,27 @@
+add (a:int, b:int) : int {
+    return a + b
+}
+
+functionIf(a:int) :int {
+    x :int = -1 + 5
+    // y : int[] = "Hello \x{10ff}"
+    y: int 
+    z:int 
+    y = add (x+2, 4 * 3 + 2)
+    y, z = z, y
+    if true 
+        a = 5
+    else 
+        a = 7
+    return a
+}
+
+functionW() {
+
+    a:int = 10 
+    //while a > 4 {
+    //    a = a -1 
+   // }
+}
+
+

@@ -354,30 +354,35 @@ let rec expr_gen = function
         | _ -> failwith "Wrong type"
       in
       (* A lot of offset calculations... *)
-      let dst_offset = make_wtac_var [ Types.Bool ] in
+
+      let dst_offset = make_wtac_var [ Types.Int ] in
       (* TODO Types may be wrong *)
       let offset =
         W.Binary
           {
             op = Mult;
             src1 = v_e2;
-            src2 = Imm (Types.get_size elem_t, W.I32);
+            src2 = Imm (Types.get_size elem_t, W.I64);
             dst = dst_offset;
-            t = W.I32;
+            t = W.I64;
           }
+      in
+      let dst_offset_wrapped = make_wtac_var [ Types.Bool ] in
+      let wrap_instr =
+        W.Unary { op = Wrap; src = dst_offset; dst = dst_offset_wrapped }
       in
       let offset_instr =
         W.Binary
           {
             op = Add;
             src1 = v_e1;
-            src2 = dst_offset;
+            src2 = dst_offset_wrapped;
             dst = fin_addr;
             t = W.I32;
           }
       in
       let mem_dst = mem_of_wtac_var fin_addr in
-      (e2_instr @ e1_instr @ [ offset; offset_instr ], mem_dst)
+      (e2_instr @ e1_instr @ [ offset; wrap_instr; offset_instr ], mem_dst)
   | Dot (e, x) ->
       (* v_e should be a pointer to the first element *)
       let e_instr, v_e = expr_gen e in

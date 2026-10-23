@@ -1,158 +1,144 @@
 # Wetac
-This is a compiler implementing the ETA programming language.
-The target is WASM or more specifically WAT
 
-An implementation of malloc can be linked
+A compiler for the Eta programming language, written in OCaml. It targets
+WebAssembly, emitting WAT (the text format) which you then assemble with
+`wat2wasm`.
 
-### TODO Tomorrow 16.04
-## Stuff to do
-- Multi assign 
-    - Extend Assign lhs to contain not only expressions but a expressions or var declarations type T = V of var_decl
-- Add a tuple Type for functoins so that you can remove the list everywhere
-    - This is used only for internal reasoning. This wil change the types of functions on the wtac level, where tuple types do not exist.
-    A pointer as the first param will be added. Allocation has to be done by the caller.
-- use another eta compiler and compare. Alos use their tests and integrate them
-- use cram tests with wasmer to execute the wat files generated
+Eta is a small imperative language with 64-bit integers, booleans, arrays,
+records and multiple return values. It comes from Cornell's
+[CS 4120 Introduction to Compilers](https://www.cs.cornell.edu/courses/cs4120/2026sp/),
+which publishes an [Eta language specification](https://www.cs.cornell.edu/courses/cs4120/2026sp/project/language.pdf).
+This is an independent implementation written from that spec — the course
+targets x86, this one targets WebAssembly.
 
-- Extend mem to take an additional offset as argument to ease offset computations
-- clean up Wtac generation
+```
+main(args: int[][]): int {
+    arr: int[] = {1, 2, 3, 4, 5}
+    total: int = 0
+    i: int = 0
+    while i < length(arr) {
+        total = total + arr[i]
+        i = i + 1
+    }
+    return total
+}
+```
 
-- Use LLMs to generate .eta files that are valid and use them as a test suite for the parser. Instruct he LLM to output 0 if the code is correct and something else if not.
-For example that the correct branch is executed.
+## Building
 
-## Tricky CFG
-See cfg_early_return.eta for a tricky CFG
-Reconstructing that is tricky because the postdominator of the if Header is the exit node which is wrong. So everything after the if
-will be put into one of the branches.
+You need OCaml (4.14 or later) and opam. From a clone:
 
+```sh
+opam install . --deps-only
+dune build
+```
 
-Early return would not be that probematic. I nee to modify the blcok to not have the terminator insde them and add the terminator later.
-This adds code to an if but this is inherently not wrong for such cases.
-This is a little more cleaner htan trying to have the very same structure.
+The compiler is then at `_build/default/bin/main.exe`, or run it with
+`dune exec wetac --`.
 
-What happens if I early return in a loop?
-Also how are excectpions handled in a CFG?
+To run the generated code, and to run the test suite, you also need
+[wabt](https://github.com/WebAssembly/wabt) for `wat2wasm` and
+[wasmer](https://wasmer.io/) to execute the module. On Ubuntu:
 
+```sh
+sudo apt install wabt
+curl https://get.wasmer.io -sSfL | sh
+```
 
+Only the `wasmer` command line tool is needed, not the OCaml bindings.
 
-LLVM optimizations passes 
-https://llvm.org/docs/Passes.html
-Nice overview of different analysis
-https://www.cs.colostate.edu/~cs553/ClassNotes/lecture05-dataflow-CSE.ppt.pdf
-How can I test the performance?
-In wasmer? or profile Rust with the wasmer call
+## Usage
 
+```sh
+wetac --codegen program.eta      # writes program.wat
+wat2wasm program.wat -o program.wasm
+wasmer run program.wasm --invoke main -- 0
+```
 
+The compiler can stop after any stage, which is useful for looking at the
+intermediate output:
 
+| Flag | Stops after |
+| --- | --- |
+| `--parse` | parsing, prints the AST |
+| `--validate` | name resolution and typechecking, prints the resolved AST |
+| `--wtac` | WTac generation, prints the IR |
+| `--optimize` | the optimizer, dumps the optimized IR (see Optimizations) |
+| `--codegen` | WASM emission (default) |
 
-- [ ] Implement Beyond Relooper for a more standard TAC that has no loop and block constructs. The analysis is mostly independent of that.
-- [ ] Fix tests
-## Not working
-Underscores emission
+Programs that allocate need `malloc.wat` linked in. It is a bump allocator
+exporting `eta_malloc`, with no `free`.
 
+## Language
 
-MINUS VAR LBRACK VAR LBRACK INT RBRACK RBRACK
-MINUS VAR LBRACK VAR RBRACK
-### Wasmer stuff
+- 64-bit `int`, `bool`
+- arrays, with literals (`{1, 2, 3}`) and string literals (`"abc"`, which are
+  arrays of character codes), `length()`, and multiple dimensions
+- records, with field access and nested types
+- multiple return values and multiple assignment
+- `if` / `else`, `while`, recursion and mutual recursion
+- globals, which must be initialized to a constant
 
+## Pipeline
 
+Source is lexed with ocamllex and parsed with Menhir into an AST (`lib/ast.ml`).
+`lib/resolve.ml` resolves names and makes them unique, `lib/typecheck.ml` runs
+the type checker. The AST is then lowered to WTac (`lib/wtac.ml`), a three
+address IR that keeps WASM's structured control flow — it has `block`, `loop`
+and `br` rather than arbitrary jumps, so nothing has to be relooped on the way
+out. `lib/emit.ml` prints WAT from it.
 
-Installation of libwasmer was troublesome
-I additionally installed clang right now (did not help)
+Ints are `i64`, everything else (`bool`, array and record pointers) is `i32`.
+Arrays and records live on the heap behind a pointer.
 
-I installed wasmer 3.0.0 because libwasmer apparently depends on that (checked cargo.toml of libwasmer) (did not help)
+## Optimizations
 
-I uninstalled wasmer by removing .wasmer folder (did not help)
+`lib/optimizations/` builds a CFG from WTac and reconstructs structured control
+flow from it afterwards. On top of that:
 
-I reinstalled rustup (did not help)
-I did chown -R xaver:xaver /home/xaver/.rustup /home/xaver/.cargo
-and chmod -R u+w /home/xaver/.rustup /home/xaver/.cargo
-but pretty sure they did not do anything
+- dominator and post-dominator trees
+- a generic dataflow solver
+- reaching definitions
+- liveness
+- constant propagation
+- dead block removal
 
-I installed libwasmer manually by checking the make file and extracting the cargo command there (that worked)
+These are not wired into codegen. `--codegen` emits WAT straight from the
+unoptimized IR. The optimizer runs only under the `--optimize` flag, which dumps
+the optimized IR next to the source as `<name>_opt.debug.wtac` for inspection;
+it is a work in progress and not part of the default path.
 
-used opam install wasmer (not libwasmer again)
-Now it worked.
-Need to check again
+## Tests
 
-dune utop is not working because of linking issues?
+```sh
+dune test
+```
 
-TODO: Use Wasmer optoin to create-exe to create exe for simple program and then check the disasembly
+This needs `wat2wasm` and `wasmer` on PATH — the cram tests compile and execute
+the generated modules, and will fail without them. See Building above.
 
+There are inline expect tests for the parser and typechecker, and cram tests
+that compile `.eta` files end to end and run them under wasmer. The cram tests
+in `test/cram.t` expect `main` to return 0; each program checks its own result
+and returns non-zero on failure. `test/invalid_parse.t` and
+`test/invalid_semantic.t` cover programs that should be rejected.
 
+## Known gaps
 
+- The optimizer is not connected to code generation; it runs only under
+  `--optimize` (see above).
+- Memory is never freed. There is no `free` and no GC — tolerable for
+  short-lived WASM modules that get torn down anyway, but it is a leak.
+- Post-dominators do not behave correctly for functions with early returns, see
+  `test/cfg_early_return.eta` and the notes in `NOTES.md`.
+- `use` statements are not lexed, so the standard library imports in
+  `test/cram.t/simple_interp.eta` do not parse.
+- Underscore (`_`) as a discard target does not emit correctly.
+- Several modules under `lib/` are earlier iterations kept for reference and are
+  excluded from the build.
 
+Design notes and open questions are in [NOTES.md](NOTES.md).
 
-So no dynamically sized structures? Which can be fine I guess
-WASMs memory is manually managed
+## License
 
-Dynamic dispatch in wasm https://fitzgen.com/2018/04/26/how-does-dynamic-dispatch-work-in-wasm.html
-
-For Memory 
-Wasm can define mutliple memories
-Even has something similar to .data in x86 to initialize parts of the memory
- (data (i32.const 0) "Hi")
-
-Virtual dispatch is probably done through tables (See https://developer.mozilla.org/en-US/docs/WebAssembly/Guides/Understanding_the_text_format#multiple_memories tables)
-in wasm
-
-and call_indirect
-
-How can we handle recursion in WASM?
-local parameters cannot be accessed across stack frames. Like caller save registers
-Rust to wasm uses ots own stack management on top of the wasm stack
-See https://surma.dev/things/rust-to-webassembly/
-Note that the WASM stack is really implicit.
-
-
-
-
-Article on intro for WASM: https://rsms.me/wasm-intro#addressing-memory
-and every byte of wasm 
-https://danielmangum.com/posts/every-byte-wasm-module/
-
-
-A [GADT example](https://blog.mads-hartmann.com/ocaml/2015/01/05/gadt-ocaml.html)
-### Questions for language
-Global initialzier can be only a constant?
-
-
-#### Problems with arraysdune runt
-Declaringg arrays with a size sucks. this sizes are not part of the type so it is shitty to parse. But you ned those specifications to at least do somthing with them.
-
-This is probably checked during type checking or not.
-It sucks that the type is used to contain additoinal infomration that is not part of the type
-
-You cannot modify the size of an array here.
-We do not need to specify th elengths when we have an initlaizeor. Since we know the size then
-Access to an array is a memry location after a call to malloc
-
-you can declare x:int[] but it is not useful except when its a function paramter
-you need x = y or something to init that array. Otherwise not usable!
-
-So what is the point?
-I get it in functoin arguments.
-But not in declarations
-allos x: int[n] for dynamic sizes but disallow this [] bullshit
-You need th esize to allocate neough mem
-
-I understand now
-x[3][] allocates space for 3 pointers to arrays. That is why we assign arrays to x[0] etc.
-These arrays themselves can be somewehere else and are not layed out at teh same space
-x[3][4] should be layed out in that way. Since we know all sizes statically.
-
-So it is not a problem actually. Still a little bit annoying.
-A parameter should not have a size (x : int[3]) not allowed that is not a type!
-
-For students
-
-WE mallo stuff but we are never freeing.
-Write this pass to free arrays when they are out of scope and not accessed anymore! So no references.
-Of course not always possible unless we do reference counting and GC!
-
-Even when we are not freeing it is not to bad since we are in WASM and it spis up a memory everytime we start th eprogram, which is teared down in the end.
-Its a little sandbox
-
-
-
-
+MIT, see [LICENSE](LICENSE).

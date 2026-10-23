@@ -8,7 +8,8 @@ type wtac_type =
   | FunType of { param_type : wtac_type list; ret_type : wtac_type option }
 [@@deriving show]
 
-type unary_op = Negate | Not [@@deriving show]
+(* Wrapping lets us change u64 to i32 for index calcualtions in subscript *)
+type unary_op = Negate | Not | Wrap [@@deriving show]
 
 type binary_op =
   | Add

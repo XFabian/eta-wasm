@@ -28,9 +28,7 @@ let%expect_test "simple" =
             (LocalDecl ((name y) (init ((Int 5))) (var_type Int)))
             (LocalDecl ((name f) (init ((Bool true))) (var_type Bool)))
             (LocalDecl ((name z) (init ()) (var_type Int)))
-            (Assign
-              (lhs ((Var y)))
-              (rhs ((Int 7))))
+            (Assign (lhs ((E (Var y)))) (rhs ((Int 7))))
             (Return ((
               Binary Add
               (Int 1)
@@ -72,15 +70,7 @@ let%expect_test "simple_if" =
             (If
               (guard (Bool true))
               (then_br (
-                Compound (
-                  Block ((
-                    Assign
-                    (lhs ((Var a)))
-                    (rhs ((Int 5))))))))
+                Compound (Block ((Assign (lhs ((E (Var a)))) (rhs ((Int 5))))))))
               (else_br ((
-                Compound (
-                  Block ((
-                    Assign
-                    (lhs ((Var a)))
-                    (rhs ((Int 7))))))))))
+                Compound (Block ((Assign (lhs ((E (Var a)))) (rhs ((Int 7))))))))))
             (Return ((Var a)))))))))) |}]

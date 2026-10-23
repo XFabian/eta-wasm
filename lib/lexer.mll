@@ -82,7 +82,7 @@ and read_string buf =
           Buffer.add_utf_8_uchar buf c; read_string buf lexbuf 
           }
   | [^ '"' '\\']+
-    { print_endline (Lexing.lexeme lexbuf); Buffer.add_string buf (Lexing.lexeme lexbuf);
+    { Buffer.add_string buf (Lexing.lexeme lexbuf);
       read_string buf lexbuf
     }
   | _ { raise (failwith ("Illegal string character: " ^ Lexing.lexeme lexbuf)) }

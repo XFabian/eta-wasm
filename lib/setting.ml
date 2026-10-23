@@ -1,1 +1,1 @@
-type t = | Parse | Validate | Wtac | Codegen | Exec
+type t = | Parse | Validate | Wtac | Optimize | Codegen | Exec

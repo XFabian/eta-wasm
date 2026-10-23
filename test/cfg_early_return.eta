@@ -9,11 +9,11 @@ functionEarly () : int {
     return 2
 }
 
-functionLoop () : int {
-    a : int = 5
-    while a > 5 {
-        b : int = 6
-        return 1
-    }
-    return 0
-}
+//functionLoop () : int {
+//    a : int = 5
+//    while a > 5 {
+//        b : int = 6
+//        return 1
+//    }
+//    return 0
+// }

@@ -50,6 +50,7 @@ module Fact = struct
   let to_string = VarMap.to_string (fun _ v -> IntSetS.to_string v)
 end
 
+module CFG = Cfg.CFG
 module Graph = AsGraph (Fact) (Cfg.CFG)
 module Solver = Solver.Make (Fact) (Graph)
 
@@ -67,8 +68,8 @@ let get_use_def g (use_id, var) block_id instr_id ud_map =
   match VarMap.find_opt var reaching_defs with
   | None -> ud_map
   | Some entry ->
-      Printf.printf "For variable %s used at %d: %s\n" var use_id
-        (IntSetS.to_string entry);
+      (* Printf.printf "For variable %s used at %d: %s\n" var use_id
+        (IntSetS.to_string entry); *)
       IdVarMap.add (use_id, var) entry ud_map
 
 let make_use_def (g : Graph.t) =
@@ -250,42 +251,37 @@ let copy_prop g cp_map =
   in
   new_blocks
 
-let analyze (cfg : Cfg.CFG.t) : unit =
+let analyze (cfg : Cfg.CFG.t) : Graph.t =
   let init _l = VarMap.empty in
   let g = Graph.of_cfg init cfg in
-  let f = Format.formatter_of_out_channel stdout in
-  (* Graph.pp f g; *)
-  let solved_g = Solver.solve g in
-  Graph.pp f solved_g;
-  Printf.printf "Use def shit";
-  let ud_map = make_use_def solved_g in
-  Printf.printf "%s\n"
-    (IdVarMap.to_string (fun _ v -> IntSetS.to_string v) ud_map);
-  (* Can be used for liveness. Each definition that is not in that list is not used
-         *)
-  let du_map = invert_use_def ud_map in
-  Printf.printf "%s\n"
-    (IdMap.to_string (fun _ v -> IdVarSet.to_string v) du_map);
+  Solver.solve g
 
-  let constant_map = get_constants g in
-  Printf.printf "%s\n"
-    (IdMap.to_string (fun _ v -> Wtac.show_value v) constant_map);
-  let new_blocks = constant_prop g ud_map constant_map in
-  let new_cfg = Cfg.CFG.make new_blocks "blub" [] Wtac.I32 [] VarSetS.empty in
-  let opt_g = Graph.of_cfg init new_cfg in
-  Graph.pp f opt_g;
-  Printf.printf "Copy Propagation Map \n";
+let copy_prop_block (b : CFG.block) cp_map =
+  let lookup i var =
+    match IdMap.find_opt i cp_map with
+    | None -> None
+    | Some (old_var, new_val) -> if var = old_var then Some new_val else None
+  in
+  let new_block =
+    List.fold_left
+      (fun new_block (i, instr) ->
+        new_block @ [ (i, rewrite_instr i instr lookup) ])
+      [] (CFG.l_instrs b)
+  in
+  Cfg.BLOCK.update_instr b new_block
+
+let run_cp (g : Graph.t) (cfg : CFG.t) : Cfg.CFG.t =
+  let ud_map = make_use_def g in
   let copy_map = copy_prop_map g ud_map in
-  Printf.printf "%s\n"
-    (IdMap.to_string (fun _ (v1, v2) -> v1 ^ "," ^ Wtac.show_value v2) copy_map);
 
-  Printf.printf "After copy propagation";
-  let solved_g' = Solver.solve opt_g in
-  let copy_blocks = copy_prop solved_g' copy_map in
-  let new_cfg = Cfg.CFG.make copy_blocks "blub" [] Wtac.I32 [] VarSetS.empty in
-  Cfg.CFG.print_cfg "optimized.dot" new_cfg;
-  let opt_g' = Graph.of_cfg init new_cfg in
-  Graph.pp f opt_g'
+  List.fold_left
+    (fun cfg block_id ->
+      let block = CFG.get_block cfg block_id in
+      let new_block = copy_prop_block block copy_map in
+      CFG.update_block cfg block_id new_block)
+    cfg (CFG.nodes cfg)
+
+
 
 (* So these analysis return a map with a location and a substitution map from
    string to value implemented as pairs.
